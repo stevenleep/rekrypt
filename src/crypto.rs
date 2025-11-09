@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025 stenvenleep
+
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
@@ -39,7 +42,11 @@ pub fn compute_hash(data: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
-/// 常数时间比较（防止时间攻击）
+/// Constant-time comparison to prevent timing attacks.
+///
+/// Uses constant-time equality check from the `subtle` crate to avoid
+/// leaking information about the comparison through timing side-channels.
+/// This is critical for MAC verification and password comparison.
 pub fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
     a.ct_eq(b).into()
 }
@@ -76,9 +83,19 @@ pub fn derive_key_pbkdf2(
     key
 }
 
-/// 安全的密钥派生（HKDF-SHA256）
+/// Derives cryptographic keys using HKDF (HMAC-based Key Derivation Function).
+///
+/// HKDF is a simple key derivation function (KDF) based on HMAC. It's designed to
+/// extract strong cryptographic keys from weak input key material. This implementation
+/// uses SHA-256 as the underlying hash function.
+///
+/// # Arguments
+/// * `ikm` - Input Key Material (e.g., seed from mnemonic)
+/// * `salt` - Optional salt value (adds entropy to the derivation)
+/// * `info` - Context and application-specific information
+/// * `length` - Desired output key length in bytes
 pub fn derive_key_hkdf(
-    ikm: &[u8],  // Input Key Material
+    ikm: &[u8],
     salt: Option<&[u8]>,
     info: &[u8],
     length: usize,
@@ -93,7 +110,10 @@ pub fn derive_key_hkdf(
     Ok(okm)
 }
 
-/// 生成安全随机 UUID（用于防重放攻击）
+/// Generates a cryptographically secure random UUID v4.
+///
+/// Used as a request identifier to prevent replay attacks. Each encryption
+/// operation gets a unique UUID that can be tracked for auditing purposes.
 pub fn generate_uuid() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();

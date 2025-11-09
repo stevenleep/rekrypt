@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025 stenvenleep
+
 use thiserror::Error;
 use recrypt::api::RecryptErr;
 use wasm_bindgen::prelude::*;
@@ -62,7 +65,7 @@ pub enum CryptoError {
     RecryptError(#[from] RecryptErr),
     
     #[error("BIP39 error")]
-    BIP39Error(#[from] bip39::ErrorKind),
+    BIP39Error(#[from] bip39::Error),
     
     #[error("Postcard error")]
     PostcardError(#[from] postcard::Error),

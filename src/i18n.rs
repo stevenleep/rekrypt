@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025 stenvenleep
+
 /// 支持的语言
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {

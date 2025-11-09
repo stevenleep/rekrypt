@@ -1,7 +1,21 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025 stenvenleep
+
 use crate::errors::{CryptoError, ErrorCode};
 use crate::i18n::I18n;
 
-/// 验证密码强度
+/// Validates password strength according to modern security standards.
+///
+/// Requirements:
+/// - Length: 8-128 characters
+/// - Complexity: At least 3 of the following:
+///   * Lowercase letters
+///   * Uppercase letters
+///   * Digits
+///   * Special characters
+///
+/// These rules balance security with usability while preventing common
+/// weak passwords.
 pub fn validate_password_strength(password: &str, i18n: &I18n) -> Result<(), CryptoError> {
     if password.len() < 8 {
         return Err(CryptoError::new(
@@ -10,6 +24,7 @@ pub fn validate_password_strength(password: &str, i18n: &I18n) -> Result<(), Cry
         ));
     }
     
+    // Cap at 128 to prevent DoS via extremely long passwords in PBKDF2
     if password.len() > 128 {
         return Err(CryptoError::new(
             ErrorCode::WeakPassword,
@@ -17,7 +32,7 @@ pub fn validate_password_strength(password: &str, i18n: &I18n) -> Result<(), Cry
         ));
     }
 
-    // 检查密码复杂度：至少包含 3 种类型
+    // Require at least 3 of 4 character types for complexity
     let has_lowercase = password.chars().any(|c| c.is_lowercase());
     let has_uppercase = password.chars().any(|c| c.is_uppercase());
     let has_digit = password.chars().any(|c| c.is_ascii_digit());
@@ -114,10 +129,17 @@ pub fn validate_iv(iv: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
     Ok(())
 }
 
-/// 验证 KDF 迭代次数（防止 DoS 攻击，确保安全性）
+/// Validates KDF iteration count to balance security and DoS prevention.
+///
+/// Enforces bounds on PBKDF2 iteration count:
+/// - Minimum (100k): Ensures adequate protection against brute-force
+/// - Maximum (10M): Prevents DoS attacks via computational exhaustion
+///
+/// These bounds are based on OWASP recommendations and typical hardware
+/// capabilities as of 2023-2024.
 pub fn validate_kdf_iterations(iterations: u32, i18n: &I18n) -> Result<(), CryptoError> {
-    const MIN_ITERATIONS: u32 = 100_000;
-    const MAX_ITERATIONS: u32 = 10_000_000;
+    const MIN_ITERATIONS: u32 = 100_000;  // OWASP minimum for PBKDF2-SHA256
+    const MAX_ITERATIONS: u32 = 10_000_000; // Prevent DoS
     
     if iterations < MIN_ITERATIONS || iterations > MAX_ITERATIONS {
         return Err(CryptoError::new(

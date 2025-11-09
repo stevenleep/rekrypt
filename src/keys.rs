@@ -1,4 +1,7 @@
-use bip39::{Language, Mnemonic, MnemonicType, Seed};
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025 stenvenleep
+
+use bip39::{Language, Mnemonic};
 use recrypt::api::{KeyGenOps, PrivateKey, Recrypt};
 use zeroize::Zeroize;
 
@@ -8,16 +11,33 @@ use crate::i18n::I18n;
 use crate::types::{ExportWarning, KeypairResult};
 use crate::validation::check_and_normalize;
 
-/// 生成密钥对（使用 BIP39 助记词）
+/// Generates a new keypair using BIP39 mnemonic phrase.
+///
+/// Creates a 24-word mnemonic (256 bits of entropy) following BIP39 standard,
+/// then derives the cryptographic keypair using HKDF with a domain-specific
+/// context string to ensure key separation.
+///
+/// # Arguments
+/// * `passphrase` - Optional BIP39 passphrase for additional security
+/// * `_i18n` - Internationalization context (unused here but kept for consistency)
+///
+/// # Security Notes
+/// - Uses 24 words (256-bit entropy) which is more secure than 12 words
+/// - HKDF derivation ensures proper key separation from seed
+/// - Sensitive data is zeroized after use
 pub fn generate_keypair(passphrase: &str, _i18n: &I18n) -> Result<KeypairResult, CryptoError> {
-    // 生成 24 词助记词
-    let mnemonic = Mnemonic::new(MnemonicType::Words24, Language::English);
-    let mnemonic_phrase = mnemonic.phrase();
-    let seed = Seed::new(&mnemonic, passphrase);
+    // Generate 24-word mnemonic (256 bits of entropy per BIP39)
+    let mnemonic = Mnemonic::generate(24)?;
+    let mnemonic_phrase = mnemonic.to_string();
+    
+    // Convert mnemonic to 512-bit seed using PBKDF2 (BIP39 standard)
+    let seed = mnemonic.to_seed(passphrase);
+    
+    // Derive 32-byte private key using HKDF with domain separation
     let mut private_key_bytes = derive_key_hkdf(
-        seed.as_bytes(),
+        &seed,
         None,
-        b"recrypt-key-v1",
+        b"recrypt-key-v1", // Domain-specific context for key separation
         32,
     )?;
 
@@ -26,7 +46,7 @@ pub fn generate_keypair(passphrase: &str, _i18n: &I18n) -> Result<KeypairResult,
         .map_err(|e| CryptoError::RecryptError(e))?;
     let public_key = api.compute_public_key(&private_key)?;
     
-    // 清零临时敏感数据
+    // Zeroize sensitive key material from memory
     private_key_bytes.zeroize();
 
     let public_key_bytes = {
@@ -41,18 +61,29 @@ pub fn generate_keypair(passphrase: &str, _i18n: &I18n) -> Result<KeypairResult,
     })
 }
 
-/// 从助记词恢复密钥对
+/// Recovers a keypair from a BIP39 mnemonic phrase.
+///
+/// Validates and normalizes the mnemonic, then derives the same keypair
+/// that was originally generated. Must use the same passphrase that was
+/// used during generation, or empty string if no passphrase was used.
+///
+/// # Arguments
+/// * `mnemonic` - BIP39 mnemonic phrase (12 or 24 words)
+/// * `passphrase` - BIP39 passphrase (use empty string if none)
+/// * `i18n` - Internationalization context for error messages
 pub fn recover_keypair(mnemonic: &str, passphrase: &str, i18n: &I18n) -> Result<KeypairResult, CryptoError> {
+    // Normalize mnemonic (trim, lowercase, validate characters)
     let normalized = check_and_normalize(mnemonic, i18n)?;
-    let mnemonic = Mnemonic::from_phrase(&normalized, Language::English)
-        .map_err(|e| CryptoError::BIP39Error(e))?;
+    let mnemonic = Mnemonic::parse_in(Language::English, &normalized)?;
 
-    let seed = Seed::new(&mnemonic, passphrase);
+    // Derive seed using same process as generation
+    let seed = mnemonic.to_seed(passphrase);
     
+    // Derive private key using same HKDF parameters
     let mut private_key_bytes = derive_key_hkdf(
-        seed.as_bytes(),
+        &seed,
         None,
-        b"recrypt-key-v1",
+        b"recrypt-key-v1", // Must match generation
         32,
     )?;
 
@@ -71,7 +102,7 @@ pub fn recover_keypair(mnemonic: &str, passphrase: &str, i18n: &I18n) -> Result<
     Ok(KeypairResult {
         private_key: private_key.bytes().to_vec(),
         public_key: public_key_bytes,
-        mnemonic: mnemonic.phrase().to_string(),
+        mnemonic: mnemonic.to_string(),
     })
 }
 

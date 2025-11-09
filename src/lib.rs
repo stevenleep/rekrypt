@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025 stenvenleep
+
 mod crypto;
 mod errors;
 mod i18n;
@@ -53,7 +56,11 @@ impl EncryptSDK {
         });
     }
     
-    /// 生成唯一 IV
+    /// Generates a unique IV (Initialization Vector) for AES-GCM encryption.
+    ///
+    /// Combines a monotonic counter with random bytes to ensure IV uniqueness
+    /// across encryption operations. This is critical because reusing an IV
+    /// with the same key in GCM mode completely breaks the security.
     fn next_iv(&self) -> [u8; 12] {
         let counter = self.iv_counter.get();
         self.iv_counter.set(counter.wrapping_add(1));
@@ -61,6 +68,7 @@ impl EncryptSDK {
         let mut rng = rand::thread_rng();
         let random_part: u32 = rng.gen();
         
+        // 8 bytes counter + 4 bytes random = 12 bytes (96-bit) nonce for GCM
         let mut iv = [0u8; 12];
         iv[0..8].copy_from_slice(&counter.to_le_bytes());
         iv[8..12].copy_from_slice(&random_part.to_le_bytes());
@@ -85,12 +93,23 @@ impl EncryptSDK {
         serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
     }
 
-    /// 加密数据
+    /// Encrypts data using proxy re-encryption with hybrid encryption.
+    ///
+    /// This implements a hybrid encryption scheme:
+    /// 1. Generate ephemeral plaintext value using recrypt
+    /// 2. Encrypt the plaintext to recipient's public key (creates encrypted value)
+    /// 3. Derive AES-256 symmetric key from the plaintext
+    /// 4. Use AES-256-GCM to encrypt actual data
+    /// 5. Store metadata in capsule for later decryption/transformation
+    ///
+    /// This approach combines the flexibility of proxy re-encryption with the
+    /// efficiency of symmetric encryption for large data.
     pub fn put(&self, data: &[u8], public_key: &[u8]) -> Result<JsValue, CryptoError> {
 
         validation::validate_data_not_empty(data, &self.i18n)?;
         validation::validate_public_key(public_key, &self.i18n)?;
 
+        // Deserialize and validate the public key
         let public_key_tuple: ([u8; 32], [u8; 32]) = postcard::from_bytes(public_key)
             .map_err(|e| CryptoError::new(
                 crate::errors::ErrorCode::SerdeError,
@@ -103,15 +122,20 @@ impl EncryptSDK {
             return Err(CryptoError::InvalidPublicKey);
         }
 
+        // Generate signing keypair for authenticated encryption
         let (_ephemeral_private_key, _ephemeral_public_key) = self.recrypt.generate_key_pair()?;
         let signing_key_pair = self.recrypt.generate_ed25519_key_pair();
+        
+        // Generate random plaintext and encrypt it to recipient's public key
         let plaintext = self.recrypt.gen_plaintext();
         let encrypted_val = self.recrypt.encrypt(&plaintext, &public_key, &signing_key_pair)?;
+        
+        // Derive symmetric key from plaintext for data encryption
         let symmetric_key = self.recrypt.derive_symmetric_key(&plaintext);
 
         let nonce = self.next_iv();
 
-        // AES 加密
+        // Encrypt actual data with AES-256-GCM
         let c_data = crypto::aes_encrypt(symmetric_key.bytes(), &nonce, data, &self.i18n)?;
 
         let data_hash = crypto::compute_hash(&c_data);
@@ -152,7 +176,13 @@ impl EncryptSDK {
         Ok(obj.into())
     }
 
-    /// 解密数据
+    /// Decrypts data that was encrypted directly to the user's public key.
+    ///
+    /// This reverses the encryption process:
+    /// 1. Verify data integrity using stored hash
+    /// 2. Decrypt the encrypted value using private key to recover plaintext
+    /// 3. Derive the same symmetric key from recovered plaintext
+    /// 4. Decrypt actual data using AES-256-GCM
     pub fn get(
         &self,
         capsule: JsValue,
@@ -166,12 +196,14 @@ impl EncryptSDK {
 
         validation::validate_version(capsule.version, 1, &self.i18n)?;
 
+        // Verify data integrity before attempting decryption
         let computed_hash = crypto::compute_hash(c_data);
         crypto::verify_mac(&computed_hash, &capsule.data_hash, &self.i18n)?;
 
         let private_key = PrivateKey::new_from_slice(private_key)?;
         let encrypted_values: EncryptedValue = postcard::from_bytes(&capsule.encrypted_data)?;
 
+        // Decrypt to recover the plaintext, then derive symmetric key
         let pt = self.recrypt.decrypt(encrypted_values, &private_key)?;
         let key = self.recrypt.derive_symmetric_key(&pt);
         let data = crypto::aes_decrypt(key.bytes(), &capsule.nonce, c_data, &self.i18n)?;
@@ -197,7 +229,7 @@ impl EncryptSDK {
 
     /// 校验助记词
     pub fn check(&self, mnemonic: String) -> bool {
-        Mnemonic::validate(&mnemonic, Language::English).is_ok()
+        Mnemonic::parse_in(Language::English, &mnemonic).is_ok()
     }
 
     /// 校验并标准化助记词
@@ -206,7 +238,19 @@ impl EncryptSDK {
         validation::check_and_normalize(mnemonic, &self.i18n)
     }
 
-    /// 授权数据访问
+    /// Generates a transform key (re-encryption key) to delegate access.
+    ///
+    /// This is the core of proxy re-encryption: it creates a transform key that
+    /// allows a semi-trusted proxy to transform ciphertext encrypted under one
+    /// key into ciphertext decryptable by another key, without the proxy learning
+    /// anything about the plaintext.
+    ///
+    /// # Arguments
+    /// * `init_private_key` - Data owner's private key
+    /// * `target_public_key` - Delegate's public key (who will receive access)
+    /// * `signing_key_pair` - Signing key from original encryption (for authentication)
+    ///
+    /// Returns serialized transform key (cfrag) that can be used by proxy
     pub fn auth(
         &self,
         init_private_key: &[u8],
@@ -229,6 +273,7 @@ impl EncryptSDK {
         let signing_key_pair = SigningKeypair::from_byte_slice(signing_key_pair)
             .map_err(|_| CryptoError::InvalidPrivateKey)?;
         
+        // Generate transform key: delegator -> delegatee
         let cfrag = self.recrypt.generate_transform_key(
             &private_key,
             &recipient_public_key,
@@ -239,7 +284,16 @@ impl EncryptSDK {
         Ok(cfrag)
     }
 
-    /// 使用授权解密数据
+    /// Decrypts data using a transform key (delegated access).
+    ///
+    /// This allows a delegate to decrypt data without the data owner's private key:
+    /// 1. Verify data integrity
+    /// 2. Transform the encrypted value using the transform key (cfrag)
+    /// 3. Decrypt the transformed value with delegate's private key
+    /// 4. Derive symmetric key and decrypt actual data
+    ///
+    /// The proxy can transform without learning the plaintext - this is the
+    /// key property of proxy re-encryption.
     #[wasm_bindgen(js_name = getByAuth)]
     pub fn get_by_auth(
         &self,
@@ -255,6 +309,7 @@ impl EncryptSDK {
 
         validation::validate_version(capsule.version, 1, &self.i18n)?;
 
+        // Verify data integrity
         let computed_hash = crypto::compute_hash(c_data);
         crypto::verify_mac(&computed_hash, &capsule.data_hash, &self.i18n)?;
 
@@ -263,8 +318,10 @@ impl EncryptSDK {
 
         let encrypted_values: EncryptedValue = postcard::from_bytes(&capsule.encrypted_data)?;
 
+        // Transform ciphertext from owner to delegate
         let transformed = self.recrypt.transform(encrypted_values, cfrag, &signing_key_pair_from_bytes(&capsule.signing_key_pair)?)?;
 
+        // Delegate decrypts with their own private key
         let pt = self.recrypt.decrypt(transformed, &private_key)?;
         let symmetric_key = self.recrypt.derive_symmetric_key(&pt);
         

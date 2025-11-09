@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025 stenvenleep
+
 use crate::crypto::{aes_decrypt, aes_encrypt, compute_mac, derive_key_pbkdf2, generate_iv, generate_salt, verify_mac};
 use crate::errors::{CryptoError, ErrorCode};
 use crate::i18n::I18n;
@@ -18,13 +21,18 @@ pub fn create_keystore(
     let salt = generate_salt();
     let iv = generate_iv();
 
+    // Use 600,000 iterations for PBKDF2 (OWASP recommendation as of 2023)
+    // This provides strong protection against brute-force attacks
     let iterations = 600_000u32;
-    let dklen = 32;
+    let dklen = 32; // 256-bit key for AES-256
 
     let mut key = derive_key_pbkdf2(password.as_bytes(), &salt, iterations, dklen);
 
     let ciphertext = aes_encrypt(&key, &iv, private_key, i18n)?;
 
+    // Compute MAC over all critical parameters to prevent tampering.
+    // This ensures integrity of the encrypted data and prevents parameter
+    // manipulation attacks (e.g., lowering iteration count).
     let version_bytes = [1u8];
     let iterations_bytes = iterations.to_le_bytes();
     let dklen_bytes = (dklen as u32).to_le_bytes();
@@ -42,6 +50,7 @@ pub fn create_keystore(
         kdf_name,
     ]);
 
+    // Zeroize sensitive key material to prevent memory disclosure
     key.zeroize();
     
     let keystore = Keystore {
@@ -107,12 +116,12 @@ pub fn recover_from_keystore(
         kdf_name,
     ]);
 
+    // Verify MAC before decryption to prevent padding oracle attacks
     if let Err(e) = verify_mac(&computed_mac, &keystore.crypto.mac, i18n) {
         key.zeroize();
         return Err(e);
     }
     
-    // 解密私钥
     let private_key = aes_decrypt(
         &key,
         &keystore.crypto.cipherparams.iv,
