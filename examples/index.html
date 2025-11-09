@@ -370,10 +370,11 @@
     </div>
 
     <script type="module">
+        import init, { EncryptSDK } from '/pkg/rekrypt.js';
         // 动态导入防止缓存
         const timestamp = new Date().getTime();
-        const module = await import(`../pkg/rekrypt.js?v=${timestamp}`);
-        const { default: init, EncryptSDK } = module;
+        // const module = await import(`/pkg/rekrypt.js?v=${timestamp}`);
+        // const { default: init, EncryptSDK } = module;
 
         let sdk, keypair, originalFile, originalHash, encryptedChunks = [], decryptedFile;
         const CHUNK_SIZE = 1024 * 1024; // 1MB
