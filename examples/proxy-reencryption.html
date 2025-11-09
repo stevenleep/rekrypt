@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REKRYPT - PROXY RE-ENCRYPTION</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            background: #0c0c0c;
+            color: #00ff41;
+            line-height: 1.4;
+            padding: 20px;
+            font-size: 13px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.2em;
+            color: #00ff41;
+            font-weight: 500;
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.7em;
+            margin-top: 6px;
+        }
+
+        .section {
+            border: 1px solid rgba(0, 255, 65, 0.2);
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .section-title {
+            color: #00d9ff;
+            font-size: 0.75em;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+            padding-bottom: 5px;
+        }
+
+        .step {
+            color: #666;
+            font-size: 0.65em;
+            margin-bottom: 8px;
+        }
+
+        button {
+            background: transparent;
+            color: #00ff41;
+            border: 1px solid #00ff41;
+            padding: 6px 12px;
+            font-family: inherit;
+            font-size: 0.75em;
+            cursor: pointer;
+            transition: all 0.15s;
+            margin: 4px 4px 4px 0;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover:not(:disabled) {
+            background: rgba(0, 255, 65, 0.15);
+            border-color: #00d9ff;
+        }
+
+        button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .info {
+            background: rgba(0, 217, 255, 0.03);
+            border-left: 2px solid rgba(0, 217, 255, 0.4);
+            padding: 8px;
+            margin: 10px 0;
+            font-size: 0.7em;
+        }
+
+        .info-label {
+            color: #666;
+            margin-bottom: 3px;
+        }
+
+        .info-value {
+            color: #00ff41;
+            word-break: break-all;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 60px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            color: #00ff41;
+            padding: 8px;
+            font-family: inherit;
+            font-size: 0.75em;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        .result {
+            background: rgba(0, 255, 65, 0.05);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 0.7em;
+        }
+
+        .result.error {
+            background: rgba(255, 68, 68, 0.05);
+            border-color: rgba(255, 68, 68, 0.3);
+            color: #ff4444;
+        }
+
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            padding: 8px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 0.65em;
+        }
+
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+            line-height: 1.3;
+        }
+
+        .log-info { color: #00d9ff; }
+        .log-success { color: #00ff41; }
+        .log-error { color: #ff4444; }
+        .log-warning { color: #ffaa00; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>REKRYPT - PROXY RE-ENCRYPTION</h1>
+            <div class="subtitle">Alice → Transform Key → Bob (Zero-Trust Delegation)</div>
+        </header>
+
+        <!-- STEP 1-2: Key Generation -->
+        <div class="grid">
+            <div class="section">
+                <div class="section-title">STEP 1: ALICE KEY</div>
+                <div class="step">Generate keypair for Alice</div>
+                <button id="aliceGenKeyBtn">GEN ALICE KEY</button>
+                <div id="aliceKeyInfo" style="display: none;">
+                    <div class="info">
+                        <div class="info-label">MNEMONIC</div>
+                        <div class="info-value" id="aliceMnemonic">-</div>
+                    </div>
+                    <div class="info">
+                        <div class="info-label">PUBLIC KEY</div>
+                        <div class="info-value" id="alicePublicKey">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">STEP 2: BOB KEY</div>
+                <div class="step">Generate keypair for Bob</div>
+                <button id="bobGenKeyBtn">GEN BOB KEY</button>
+                <div id="bobKeyInfo" style="display: none;">
+                    <div class="info">
+                        <div class="info-label">MNEMONIC</div>
+                        <div class="info-value" id="bobMnemonic">-</div>
+                    </div>
+                    <div class="info">
+                        <div class="info-label">PUBLIC KEY</div>
+                        <div class="info-value" id="bobPublicKey">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 3: Encryption -->
+        <div class="section">
+            <div class="section-title">STEP 3: ENCRYPT (ALICE)</div>
+            <div class="step">Alice encrypts message with her public key</div>
+            <textarea id="messageInput" placeholder="Enter message to encrypt...">Hello Bob! This is a secret message from Alice.</textarea>
+            <button id="encryptBtn" disabled>ENCRYPT</button>
+            <div id="encryptResult" style="display: none;">
+                <div class="info">
+                    <div class="info-label">CIPHERTEXT LENGTH</div>
+                    <div class="info-value" id="ciphertextLen">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 4-5: Transform & Decrypt -->
+        <div class="grid">
+            <div class="section">
+                <div class="section-title">STEP 4: TRANSFORM KEY</div>
+                <div class="step">Alice generates re-encryption key: Alice → Bob</div>
+                <button id="generateTransformKeyBtn" disabled>GEN TRANSFORM KEY</button>
+                <div id="transformKeyResult" style="display: none;">
+                    <div class="info">
+                        <div class="info-label">TRANSFORM KEY</div>
+                        <div class="info-value" id="transformKeyLen">-</div>
+                    </div>
+                    <div class="info" style="border-color: rgba(255, 170, 0, 0.4);">
+                        <div class="info-label">NOTE</div>
+                        <div class="info-value" style="color: #ffaa00;">
+                            Proxy can transform without seeing plaintext
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">STEP 5: DECRYPT (BOB)</div>
+                <div class="step">Bob decrypts with transform key + his private key</div>
+                <button id="decryptBtn" disabled>DECRYPT</button>
+                <div id="decryptResult" style="display: none;">
+                    <div class="result" id="decryptedMessageBox">
+                        <div class="info-label">DECRYPTED MESSAGE</div>
+                        <div class="info-value" id="decryptedMessage">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 6: Verification -->
+        <div class="section">
+            <div class="section-title">STEP 6: VERIFY</div>
+            <div id="verifyResult" style="display: none;">
+                <div class="info">
+                    <div class="info-label">ORIGINAL</div>
+                    <div class="info-value" id="originalMsg">-</div>
+                </div>
+                <div class="info">
+                    <div class="info-label">DECRYPTED</div>
+                    <div class="info-value" id="decryptedMsg">-</div>
+                </div>
+                <div class="result" id="matchResult">
+                    <div id="matchStatus">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="section">
+            <div class="section-title">LOG</div>
+            <div class="log" id="logContainer"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import init, { EncryptSDK } from '/pkg/rekrypt.js';
+
+        let sdk;
+        let aliceKeypair, bobKeypair;
+        let encryptedData = null;
+        let transformKey = null;
+        let originalMessage = '';
+
+        function log(msg, type = 'info') {
+            const el = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            entry.textContent = `[${time}] ${msg}`;
+            el.appendChild(entry);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function formatBytes(bytes) {
+            const arr = Array.from(bytes.slice(0, 16));
+            const hex = arr.map(b => b.toString(16).padStart(2, '0')).join(' ');
+            return `${hex}... (${bytes.length} bytes)`;
+        }
+
+        (async () => {
+            try {
+                await init();
+                sdk = new EncryptSDK();
+                log('SDK initialized', 'success');
+                log('Step 1: Generate Alice & Bob keys', 'info');
+            } catch (err) {
+                log('Init failed: ' + err.message, 'error');
+            }
+        })();
+
+        document.getElementById('aliceGenKeyBtn').addEventListener('click', () => {
+            try {
+                log('Generating Alice keypair...', 'info');
+                aliceKeypair = sdk.gen();
+                
+                document.getElementById('aliceMnemonic').textContent = aliceKeypair.mnemonic;
+                document.getElementById('alicePublicKey').textContent = formatBytes(aliceKeypair.public_key);
+                document.getElementById('aliceKeyInfo').style.display = 'block';
+                
+                log('Alice key generated', 'success');
+                
+                if (bobKeypair) {
+                    document.getElementById('encryptBtn').disabled = false;
+                    log('Step 3: Ready to encrypt', 'info');
+                }
+            } catch (err) {
+                log('Alice key gen failed: ' + err.message, 'error');
+            }
+        });
+
+        document.getElementById('bobGenKeyBtn').addEventListener('click', () => {
+            try {
+                log('Generating Bob keypair...', 'info');
+                bobKeypair = sdk.gen();
+                
+                document.getElementById('bobMnemonic').textContent = bobKeypair.mnemonic;
+                document.getElementById('bobPublicKey').textContent = formatBytes(bobKeypair.public_key);
+                document.getElementById('bobKeyInfo').style.display = 'block';
+                
+                log('Bob key generated', 'success');
+                
+                if (aliceKeypair) {
+                    document.getElementById('encryptBtn').disabled = false;
+                    log('Step 3: Ready to encrypt', 'info');
+                }
+            } catch (err) {
+                log('Bob key gen failed: ' + err.message, 'error');
+            }
+        });
+
+        document.getElementById('encryptBtn').addEventListener('click', () => {
+            try {
+                originalMessage = document.getElementById('messageInput').value;
+                if (!originalMessage.trim()) {
+                    log('Empty message', 'warning');
+                    return;
+                }
+                
+                log('Encrypting with Alice public key...', 'info');
+                
+                const messageBytes = new TextEncoder().encode(originalMessage);
+                encryptedData = sdk.put(messageBytes, aliceKeypair.public_key);
+                
+                document.getElementById('ciphertextLen').textContent = `${encryptedData.c_data.length} bytes`;
+                document.getElementById('encryptResult').style.display = 'block';
+                
+                log(`Encrypted (${encryptedData.c_data.length} bytes)`, 'success');
+                log('Step 4: Generate transform key', 'info');
+                
+                document.getElementById('generateTransformKeyBtn').disabled = false;
+            } catch (err) {
+                log('Encrypt failed: ' + err.message, 'error');
+            }
+        });
+
+        document.getElementById('generateTransformKeyBtn').addEventListener('click', () => {
+            try {
+                log('Generating transform key (Alice → Bob)...', 'info');
+                
+                transformKey = sdk.auth(
+                    aliceKeypair.private_key,
+                    bobKeypair.public_key,
+                    encryptedData.capsule.signing_key_pair
+                );
+                
+                document.getElementById('transformKeyLen').textContent = `${transformKey.length} bytes`;
+                document.getElementById('transformKeyResult').style.display = 'block';
+                
+                log(`Transform key generated (${transformKey.length} bytes)`, 'success');
+                log('Step 5: Bob can decrypt now', 'info');
+                
+                document.getElementById('decryptBtn').disabled = false;
+            } catch (err) {
+                log('Transform key gen failed: ' + err.message, 'error');
+            }
+        });
+
+        document.getElementById('decryptBtn').addEventListener('click', () => {
+            try {
+                log('Bob decrypting with transform key...', 'info');
+                
+                const decryptedBytes = sdk.getByAuth(
+                    encryptedData.capsule,
+                    transformKey,
+                    bobKeypair.private_key,
+                    encryptedData.c_data
+                );
+                
+                const decryptedMessage = new TextDecoder().decode(decryptedBytes);
+                
+                document.getElementById('decryptedMessage').textContent = decryptedMessage;
+                document.getElementById('decryptResult').style.display = 'block';
+                
+                log('Decrypted: ' + decryptedMessage, 'success');
+                
+                // Verify
+                document.getElementById('originalMsg').textContent = originalMessage;
+                document.getElementById('decryptedMsg').textContent = decryptedMessage;
+                
+                const isMatch = originalMessage === decryptedMessage;
+                const matchStatus = document.getElementById('matchStatus');
+                const matchResult = document.getElementById('matchResult');
+                
+                if (isMatch) {
+                    matchStatus.textContent = '✓ MATCH: Original === Decrypted';
+                    matchResult.className = 'result';
+                    log('Verification passed', 'success');
+                } else {
+                    matchStatus.textContent = '✗ MISMATCH';
+                    matchResult.className = 'result error';
+                    log('Verification failed', 'error');
+                }
+                
+                document.getElementById('verifyResult').style.display = 'block';
+                log('Demo complete (Bob never had Alice private key)', 'success');
+            } catch (err) {
+                log('Decrypt failed: ' + err.message, 'error');
+            }
+        });
+    </script>
+</body>
+</html>
+

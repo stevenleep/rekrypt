@@ -4,7 +4,8 @@
   "description": "Rekrypt File Encryption Playground",
   "main": "index.html",
   "scripts": {
-    "dev": "cd .. && live-server --port=8080 --entry-file=examples/index.html"
+    "dev": "cd .. && live-server --port=8080 --entry-file=examples/index.html",
+    "demo": "cd .. && live-server --port=8080 --entry-file=examples/proxy-reencryption.html"
   },
   "author": "lsw@zstun.com",
   "license": "AGPL-3.0",

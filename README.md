@@ -1,68 +1,73 @@
-# @stenvenleep/rekrypt
-rekrypt 一个基于 Rust 的高性能代理重加密库，默认提供 WASM 构建。
+# rekrypt
+
+基于 Rust 的代理重加密库 (Proxy Re-Encryption)，提供 WASM 构建。
 
 https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
 
+## 什么是代理重加密？
+
+允许代理在**不解密**的情况下，将 Alice 加密的数据转换为 Bob 可解密的形式。
+
+```
+Alice 加密 → 转换密钥 → 代理转换 → Bob 解密
+          (Alice 授权)   (无需私钥)
+```
+
+**核心优势**：
+- **零信任代理** - 代理服务器无法看到明文，只能转换
+- **密钥隔离** - Alice 私钥永不暴露，Bob 也无法反推 Alice 私钥
+- **灵活授权** - 可随时撤销授权，无需重新加密数据
+- **一对多共享** - 同一份密文可授权给多个用户
+- **降低开销** - 无需为每个用户重新加密，节省存储和计算
 
 ## 快速开始
 
-#### 1. 构建 WASM 包
-
 ```bash
-curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
 # 构建 WASM
 wasm-pack build --target web --release
+
+# 运行示例
+cd examples && pnpm install
+
+# 文件加密演示
+pnpm dev
+
+# 代理重加密演示
+pnpm demo
 ```
 
-#### 2. 在 JavaScript 中使用
+## 使用示例
 
 ```javascript
 import init, { EncryptSDK } from './pkg/rekrypt.js';
 await init();
 const sdk = new EncryptSDK();
 
-// 生成密钥对
-const keypair = sdk.gen();
-console.log('助记词:', keypair.mnemonic);
+// 1. 生成密钥对
+const alice = sdk.gen();
+const bob = sdk.gen();
 
-// 加密数据
-const data = new TextEncoder().encode('Hello, World!');
-const encrypted = sdk.put(data, keypair.public_key);
+// 2. Alice 加密数据
+const message = new TextEncoder().encode('Secret message');
+const encrypted = sdk.put(message, alice.public_key);
 
-// 解密数据
-const decrypted = sdk.get(
+// 3. Alice 生成转换密钥（授权 Bob）
+const transformKey = sdk.auth(
+    alice.private_key,
+    bob.public_key,
+    encrypted.capsule.signing_key_pair
+);
+
+// 4. Bob 解密（无需 Alice 私钥）
+const decrypted = sdk.getByAuth(
     encrypted.capsule,
-    keypair.private_key,
+    transformKey,
+    bob.private_key,
     encrypted.c_data
 );
-console.log('解密结果:', new TextDecoder().decode(decrypted));
 ```
 
-## 🤝 贡献
+## 许可证
 
-欢迎提交 Issue 和 Pull Request！
-
-## 📄 许可证
-
-本项目采用 **GNU Affero General Public License v3.0 (AGPL-3.0)** 开源协议。
-
-### 主要条款
-
-- ✅ **商业使用**：允许用于商业目的
-- ✅ **修改**：允许修改源代码
-- ✅ **分发**：允许分发原始或修改版本
-- ✅ **专利授权**：提供明确的专利授权
-- ✅ **私人使用**：允许私人使用和修改
-
-- ⚠️ **网络使用条款**：如果通过网络提供服务，必须公开修改后的源代码
-- ⚠️ **相同许可证**：派生作品必须使用相同的 AGPL-3.0 许可证
-- ⚠️ **状态声明**：必须说明对原始代码的修改
-- ⚠️ **披露源代码**：必须提供完整的源代码
-
-详见 [LICENSE](LICENSE) 文件。
-
----
-
-**注意**：采样模式适合演示和快速开发，生产环境敏感数据请使用全量加密模式。
+[AGPL-3.0](LICENSE)
 
