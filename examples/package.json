@@ -1,0 +1,19 @@
+{
+  "name": "rekrypt-debug",
+  "version": "1.0.0",
+  "description": "Rekrypt File Encryption Debug Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "rekrypt",
+    "encryption",
+    "wasm",
+    "debug"
+  ],
+  "author": "",
+  "license": "AGPL-3.0"
+}
+

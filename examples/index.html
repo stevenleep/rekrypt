@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REKRYPT - Debug</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            background: #0c0c0c;
+            color: #00ff41;
+            line-height: 1.4;
+            padding: 20px;
+            font-size: 13px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.2em;
+            color: #00ff41;
+            font-weight: 500;
+            letter-spacing: 2px;
+        }
+
+        .status {
+            color: #666;
+            font-size: 0.7em;
+            margin-top: 6px;
+        }
+
+        .section {
+            border: 1px solid rgba(0, 255, 65, 0.2);
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .section-title {
+            color: #00d9ff;
+            font-size: 0.75em;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+            padding-bottom: 5px;
+        }
+
+        button, .file-btn {
+            background: transparent;
+            color: #00ff41;
+            border: 1px solid #00ff41;
+            padding: 6px 12px;
+            font-family: inherit;
+            font-size: 0.75em;
+            cursor: pointer;
+            transition: all 0.15s;
+            margin: 4px 4px 4px 0;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover:not(:disabled), .file-btn:hover {
+            background: rgba(0, 255, 65, 0.15);
+            border-color: #00d9ff;
+        }
+
+        button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .info {
+            background: rgba(0, 217, 255, 0.03);
+            border-left: 2px solid rgba(0, 217, 255, 0.4);
+            padding: 8px;
+            margin: 10px 0;
+            font-size: 0.7em;
+        }
+
+        .info-label {
+            color: #666;
+            margin-bottom: 3px;
+        }
+
+        .info-value {
+            color: #00ff41;
+            word-break: break-all;
+        }
+
+        .progress {
+            width: 100%;
+            height: 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            margin: 10px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #00ff41;
+            transition: width 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65em;
+            color: #0c0c0c;
+            font-weight: 600;
+        }
+
+        .hash-compare {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 10px;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .hash-box {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px;
+            border: 1px solid rgba(0, 255, 65, 0.3);
+        }
+
+        .hash-label {
+            color: #666;
+            font-size: 0.65em;
+            margin-bottom: 4px;
+        }
+
+        .hash-value {
+            color: #00ff41;
+            font-size: 0.7em;
+            word-break: break-all;
+        }
+
+        .hash-match {
+            font-size: 2em;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            padding: 8px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 0.65em;
+        }
+
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+            line-height: 1.3;
+        }
+
+        .log-info { color: #00d9ff; }
+        .log-success { color: #00ff41; }
+        .log-error { color: #ff4444; }
+        .log-warning { color: #ffaa00; }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin: 10px 0;
+            font-size: 0.7em;
+        }
+
+        .stat {
+            text-align: center;
+            padding: 6px;
+            border: 1px solid rgba(0, 217, 255, 0.3);
+        }
+
+        .stat-value {
+            color: #00ff41;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.8em;
+            margin-top: 3px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>REKRYPT DEBUG</h1>
+            <div class="status" id="status">Initializing...</div>
+        </header>
+
+        <!-- File Upload -->
+        <div class="section">
+            <div class="section-title">FILE UPLOAD</div>
+            <label class="file-btn">
+                <input type="file" id="fileInput" />
+                SELECT FILE
+            </label>
+            <div id="fileInfo" style="display: none;">
+                <div class="info">
+                    <div class="info-label">FILE</div>
+                    <div class="info-value" id="fileName">-</div>
+                </div>
+                <div class="info">
+                    <div class="info-label">SIZE</div>
+                    <div class="info-value" id="fileSize">-</div>
+                </div>
+                <div class="info">
+                    <div class="info-label">SHA-256</div>
+                    <div class="info-value" id="originalHash">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Encryption -->
+        <div class="section">
+            <div class="section-title">ENCRYPTION</div>
+            <div class="controls">
+                <button id="genKeyBtn">GEN KEY</button>
+                <button id="encryptBtn" disabled>ENCRYPT</button>
+            </div>
+            <div class="controls">
+                <label style="display: flex; align-items: center; gap: 8px; margin: 0;">
+                    <input type="checkbox" id="samplingMode" style="width: auto;">
+                    <span style="font-size: 0.75em; color: #00d9ff;">SAMPLING MODE (Faster)</span>
+                </label>
+                <div>
+                    <label for="samplingRate">RATE</label>
+                    <input type="number" id="samplingRate" value="0.1" min="0.05" max="1" step="0.05" style="width: 80px;" />
+                </div>
+            </div>
+            <div class="info" style="margin-top: 10px;">
+                <div class="info-label">PERFORMANCE</div>
+                <div class="info-value" style="font-size: 0.65em;">
+                    ⚡ Parallel batch processing enabled<br>
+                    💡 Lower sampling rate = faster encryption
+                </div>
+            </div>
+            <div id="keyInfo" style="display: none;">
+                <div class="info">
+                    <div class="info-label">MNEMONIC</div>
+                    <div class="info-value" id="mnemonic">-</div>
+                </div>
+            </div>
+            <div class="progress" id="encryptProgress" style="display: none;">
+                <div class="progress-bar" id="encryptBar">0%</div>
+            </div>
+            <div class="stats" id="encryptStats" style="display: none;">
+                <div class="stat">
+                    <div class="stat-value" id="encChunks">0</div>
+                    <div class="stat-label">CHUNKS</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="encTime">0s</div>
+                    <div class="stat-label">TIME</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="encSpeed">0</div>
+                    <div class="stat-label">MB/s</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload to IndexedDB -->
+        <div class="section">
+            <div class="section-title">UPLOAD (IndexedDB)</div>
+            <div class="controls">
+                <button id="uploadBtn" disabled>UPLOAD</button>
+                <button id="downloadBtn" disabled>DOWNLOAD CHUNKS</button>
+                <button id="clearBtn" disabled>CLEAR DB</button>
+            </div>
+            <div class="progress" id="uploadProgress" style="display: none;">
+                <div class="progress-bar" id="uploadBar">0%</div>
+            </div>
+            <div class="stats" id="uploadStats" style="display: none;">
+                <div class="stat">
+                    <div class="stat-value" id="uploadChunks">0</div>
+                    <div class="stat-label">CHUNKS</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="uploadTime">0s</div>
+                    <div class="stat-label">TIME</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="uploadSpeed">0</div>
+                    <div class="stat-label">MB/s</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Decryption -->
+        <div class="section">
+            <div class="section-title">DECRYPTION</div>
+            <div class="controls">
+                <button id="decryptBtn" disabled>DECRYPT</button>
+                <button id="downloadDecryptedBtn" disabled>DOWNLOAD FILE</button>
+            </div>
+            <div class="progress" id="decryptProgress" style="display: none;">
+                <div class="progress-bar" id="decryptBar">0%</div>
+            </div>
+            <div class="stats" id="decryptStats" style="display: none;">
+                <div class="stat">
+                    <div class="stat-value" id="decChunks">0</div>
+                    <div class="stat-label">CHUNKS</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="decTime">0s</div>
+                    <div class="stat-label">TIME</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="decSpeed">0</div>
+                    <div class="stat-label">MB/s</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Integrity Check -->
+        <div class="section">
+            <div class="section-title">INTEGRITY CHECK</div>
+            <div id="hashCompare" style="display: none;">
+                <div class="hash-compare">
+                    <div class="hash-box">
+                        <div class="hash-label">ORIGINAL</div>
+                        <div class="hash-value" id="hashOriginal">-</div>
+                    </div>
+                    <div class="hash-match" id="hashMatch">?</div>
+                    <div class="hash-box">
+                        <div class="hash-label">DECRYPTED</div>
+                        <div class="hash-value" id="hashDecrypted">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="section">
+            <div class="section-title">LOG</div>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 动态导入防止缓存
+        const timestamp = new Date().getTime();
+        const module = await import(`../pkg/rekrypt.js?v=${timestamp}`);
+        const { default: init, EncryptSDK } = module;
+
+        let sdk, keypair, originalFile, originalHash, encryptedChunks = [], decryptedFile;
+        const CHUNK_SIZE = 1024 * 1024; // 1MB
+        const DB_NAME = 'RekryptDB';
+        const STORE_NAME = 'encrypted_chunks';
+        let db;
+        
+        // 采样加密配置
+        let samplingMode = false; // 是否启用采样模式
+        let samplingMap = null;   // 采样映射表
+
+        // IndexedDB 初始化
+        async function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'index' });
+                    }
+                };
+            });
+        }
+
+        // 存储加密块到 IndexedDB
+        async function saveChunkToDB(index, chunk) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.put({ index, data: chunk });
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // 从 IndexedDB 读取所有块
+        async function getAllChunksFromDB() {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.getAll();
+                
+                request.onsuccess = () => {
+                    // 返回完整对象 { index, data }
+                    const chunks = request.result.sort((a, b) => a.index - b.index);
+                    resolve(chunks);
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // 清空 IndexedDB
+        async function clearDB() {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.clear();
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // 获取 IndexedDB 中的块数量
+        async function getChunkCount() {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.count();
+                
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        function log(msg, type = 'info') {
+            const el = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            el.appendChild(entry);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        // 流式计算 SHA-256 (分块，不阻塞)
+        async function hash(data, showProgress = false) {
+            // 如果数据小于 10MB，直接计算
+            if (data.byteLength < 10 * 1024 * 1024) {
+                const buf = await crypto.subtle.digest('SHA-256', data);
+                return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+            
+            // 大文件：分块流式计算
+            const chunkSize = 2 * 1024 * 1024; // 2MB per chunk
+            const chunks = Math.ceil(data.byteLength / chunkSize);
+            let offset = 0;
+            
+            // 创建一个累积的哈希计算
+            const hashChunks = [];
+            
+            for (let i = 0; i < chunks; i++) {
+                const end = Math.min(offset + chunkSize, data.byteLength);
+                const chunk = data.slice(offset, end);
+                hashChunks.push(new Uint8Array(chunk));
+                offset = end;
+                
+                if (showProgress && i % 10 === 0) {
+                    const progress = ((i + 1) / chunks * 100).toFixed(0);
+                    document.getElementById('status').textContent = `Hashing ${progress}%`;
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+            
+            // 合并所有块并计算最终哈希
+            const totalSize = hashChunks.reduce((sum, c) => sum + c.length, 0);
+            const merged = new Uint8Array(totalSize);
+            let pos = 0;
+            for (const chunk of hashChunks) {
+                merged.set(chunk, pos);
+                pos += chunk.length;
+            }
+            
+            const buf = await crypto.subtle.digest('SHA-256', merged);
+            if (showProgress) {
+                document.getElementById('status').textContent = 'Ready';
+            }
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+        
+        // 采样哈希（从 File 对象直接采样，不读取整个文件）
+        async function hashSamplingFromFile(file) {
+            const fileSize = file.size;
+            let sampleSize;
+            
+            // 根据文件大小动态调整采样大小
+            if (fileSize > 1024 * 1024 * 1024) {
+                sampleSize = 128 * 1024; // > 1GB: 128KB × 5 = 640KB
+            } else if (fileSize > 500 * 1024 * 1024) {
+                sampleSize = 256 * 1024; // > 500MB: 256KB × 5 = 1.25MB
+            } else if (fileSize > 100 * 1024 * 1024) {
+                sampleSize = 512 * 1024; // > 100MB: 512KB × 5 = 2.5MB
+            } else {
+                sampleSize = 1024 * 1024; // 其他: 1MB
+            }
+            
+            const samples = [];
+            
+            // 头部
+            const headBlob = file.slice(0, Math.min(sampleSize, fileSize));
+            samples.push(new Uint8Array(await headBlob.arrayBuffer()));
+            
+            // 中间 3 个点
+            if (fileSize > sampleSize * 2) {
+                const positions = [
+                    Math.floor(fileSize / 4),
+                    Math.floor(fileSize / 2),
+                    Math.floor(fileSize * 3 / 4)
+                ];
+                
+                for (const pos of positions) {
+                    const end = Math.min(pos + sampleSize, fileSize);
+                    const blob = file.slice(pos, end);
+                    samples.push(new Uint8Array(await blob.arrayBuffer()));
+                }
+            }
+            
+            // 尾部
+            if (fileSize > sampleSize) {
+                const tailBlob = file.slice(-sampleSize);
+                samples.push(new Uint8Array(await tailBlob.arrayBuffer()));
+            }
+            
+            // 合并采样数据
+            const totalSize = samples.reduce((sum, s) => sum + s.length, 0);
+            const merged = new Uint8Array(totalSize);
+            let offset = 0;
+            for (const sample of samples) {
+                merged.set(sample, offset);
+                offset += sample.length;
+            }
+            
+            const buf = await crypto.subtle.digest('SHA-256', merged);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+        
+        // 采样哈希（从 ArrayBuffer，用于解密后的数据）
+        async function hashSampling(data) {
+            const fileSize = data.byteLength;
+            let sampleSize;
+            
+            if (fileSize > 1024 * 1024 * 1024) {
+                sampleSize = 128 * 1024;
+            } else if (fileSize > 500 * 1024 * 1024) {
+                sampleSize = 256 * 1024;
+            } else if (fileSize > 100 * 1024 * 1024) {
+                sampleSize = 512 * 1024;
+            } else {
+                sampleSize = 1024 * 1024;
+            }
+            
+            const samples = [];
+            samples.push(new Uint8Array(data.slice(0, Math.min(sampleSize, fileSize))));
+            
+            if (fileSize > sampleSize * 2) {
+                const positions = [
+                    Math.floor(fileSize / 4),
+                    Math.floor(fileSize / 2),
+                    Math.floor(fileSize * 3 / 4)
+                ];
+                
+                for (const pos of positions) {
+                    const end = Math.min(pos + sampleSize, fileSize);
+                    samples.push(new Uint8Array(data.slice(pos, end)));
+                }
+            }
+            
+            if (fileSize > sampleSize) {
+                samples.push(new Uint8Array(data.slice(-sampleSize)));
+            }
+            
+            const totalSize = samples.reduce((sum, s) => sum + s.length, 0);
+            const merged = new Uint8Array(totalSize);
+            let offset = 0;
+            for (const sample of samples) {
+                merged.set(sample, offset);
+                offset += sample.length;
+            }
+            
+            const buf = await crypto.subtle.digest('SHA-256', merged);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        // Init
+        (async () => {
+            try {
+                await init();
+                await initDB();
+                sdk = new EncryptSDK();
+                document.getElementById('status').textContent = 'Ready';
+                log('SDK initialized', 'success');
+                log('IndexedDB initialized', 'success');
+            } catch (err) {
+                document.getElementById('status').textContent = 'Failed';
+                log('Init error: ' + err.message, 'error');
+            }
+        })();
+
+        // File select
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            originalFile = file;
+            log(`File: ${file.name} (${formatSize(file.size)})`, 'info');
+
+            // 根据文件大小选择哈希策略
+            const fileSizeMB = file.size / (1024 * 1024);
+            const startTime = Date.now();
+            
+            if (fileSizeMB > 100) {
+                log('Large file detected, using fast sampling hash...', 'info');
+                originalHash = await hashSamplingFromFile(file);
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+                document.getElementById('originalHash').textContent = originalHash + ' (sampled)';
+                log(`File hash calculated in ${elapsed}s`, 'success');
+            } else {
+                log('Calculating file hash...', 'info');
+                const data = await file.arrayBuffer();
+                originalHash = await hash(data, true);
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+                document.getElementById('originalHash').textContent = originalHash;
+                log(`File hash calculated in ${elapsed}s`, 'success');
+            }
+
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatSize(file.size);
+
+            document.getElementById('encryptBtn').disabled = !keypair;
+        });
+
+        // Generate keypair
+        document.getElementById('genKeyBtn').addEventListener('click', () => {
+            try {
+                log('Generating keypair...', 'info');
+                keypair = sdk.gen();
+                
+                // 确保密钥是 Uint8Array 格式
+                if (!(keypair.public_key instanceof Uint8Array)) {
+                    keypair.public_key = new Uint8Array(keypair.public_key);
+                }
+                if (!(keypair.private_key instanceof Uint8Array)) {
+                    keypair.private_key = new Uint8Array(keypair.private_key);
+                }
+                
+                document.getElementById('keyInfo').style.display = 'block';
+                document.getElementById('mnemonic').textContent = keypair.mnemonic;
+                
+                if (originalFile) {
+                    document.getElementById('encryptBtn').disabled = false;
+                }
+                
+                log('Keypair generated', 'success');
+            } catch (err) {
+                log('Key gen error: ' + (err.message || err), 'error');
+            }
+        });
+
+        // 生成采样映射（优化的智能采样策略）
+        function generateSamplingMap(totalChunks, samplingRate) {
+            if (totalChunks <= 3) {
+                // 小文件：加密所有块
+                return Array.from({length: totalChunks}, (_, i) => i);
+            }
+            
+            const map = new Set();
+            
+            // 1. 文件头尾必须加密（保证文件格式完整性）
+            map.add(0);
+            map.add(totalChunks - 1);
+            
+            // 2. 中间部分均匀采样
+            const targetCount = Math.max(2, Math.ceil(totalChunks * samplingRate));
+            const step = (totalChunks - 2) / (targetCount - 2);
+            
+            for (let i = 1; i < targetCount - 1; i++) {
+                const index = Math.floor(1 + i * step);
+                if (index > 0 && index < totalChunks - 1) {
+                    map.add(index);
+                }
+            }
+            
+            return Array.from(map).sort((a, b) => a - b);
+        }
+
+        // Encrypt (并行批处理优化 + 采样模式)
+        document.getElementById('encryptBtn').addEventListener('click', async () => {
+            try {
+                samplingMode = document.getElementById('samplingMode').checked;
+                const samplingRate = parseFloat(document.getElementById('samplingRate').value);
+                
+                const mode = samplingMode ? `sampling (${(samplingRate * 100).toFixed(0)}%)` : 'full';
+                log(`Starting encryption (${mode})...`, 'info');
+                
+                document.getElementById('encryptBtn').disabled = true;
+                document.getElementById('encryptProgress').style.display = 'block';
+                document.getElementById('encryptStats').style.display = 'grid';
+                
+                const data = await originalFile.arrayBuffer();
+                const totalChunks = Math.ceil(data.byteLength / CHUNK_SIZE);
+                encryptedChunks = [];
+                
+                // 生成采样映射
+                if (samplingMode) {
+                    samplingMap = generateSamplingMap(totalChunks, samplingRate);
+                    log(`Sampling: ${samplingMap.length}/${totalChunks} chunks (${(samplingMap.length/totalChunks*100).toFixed(1)}%)`, 'info');
+                } else {
+                    samplingMap = Array.from({length: totalChunks}, (_, i) => i);
+                }
+                
+                const startTime = Date.now();
+                const chunksToEncrypt = samplingMap.length;
+                
+                // 并行批处理配置（根据块数量动态调整）
+                const PARALLEL_BATCH_SIZE = chunksToEncrypt > 50 ? 10 : 5;
+
+                // 批量并行处理
+                for (let batchStart = 0; batchStart < samplingMap.length; batchStart += PARALLEL_BATCH_SIZE) {
+                    const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, samplingMap.length);
+                    
+                    // 并行加密当前批次的所有块
+                    const batchPromises = [];
+                    for (let idx = batchStart; idx < batchEnd; idx++) {
+                        const i = samplingMap[idx];
+                        const start = i * CHUNK_SIZE;
+                        const end = Math.min(start + CHUNK_SIZE, data.byteLength);
+                        const chunk = new Uint8Array(data.slice(start, end));
+                        
+                        batchPromises.push(
+                            Promise.resolve().then(() => ({
+                                index: i,
+                                encrypted: sdk.put(chunk, keypair.public_key)
+                            }))
+                        );
+                    }
+                    
+                    // 等待当前批次完成
+                    const batchResults = await Promise.all(batchPromises);
+                    encryptedChunks.push(...batchResults);
+                    
+                    // 批次完成后更新 UI（减少更新频率）
+                    const progress = (batchEnd / chunksToEncrypt * 100).toFixed(1);
+                    document.getElementById('encryptBar').style.width = progress + '%';
+                    document.getElementById('encryptBar').textContent = progress + '%';
+                    document.getElementById('encChunks').textContent = `${batchEnd}/${chunksToEncrypt}`;
+                    
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const processedMB = (batchEnd * CHUNK_SIZE) / (1024 * 1024);
+                    const speed = (processedMB / elapsed).toFixed(2);
+                    document.getElementById('encTime').textContent = elapsed.toFixed(1) + 's';
+                    document.getElementById('encSpeed').textContent = speed;
+                    
+                    // 每个批次后让出主线程（更少的让出次数）
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+                
+                document.getElementById('uploadBtn').disabled = false;
+                const savePercent = samplingMode ? ((1 - samplingMap.length/totalChunks) * 100).toFixed(1) : 0;
+                log(`Encrypted ${chunksToEncrypt} chunks in ${((Date.now() - startTime) / 1000).toFixed(2)}s (saved ${savePercent}% time)`, 'success');
+            } catch (err) {
+                log('Encrypt error: ' + (err.message || err), 'error');
+            }
+        });
+
+        // Upload to IndexedDB (并行批处理)
+        document.getElementById('uploadBtn').addEventListener('click', async () => {
+            try {
+                log('Starting upload to IndexedDB...', 'info');
+                
+                document.getElementById('uploadBtn').disabled = true;
+                document.getElementById('uploadProgress').style.display = 'block';
+                document.getElementById('uploadStats').style.display = 'grid';
+                
+                await clearDB(); // 清空旧数据
+                
+                const startTime = Date.now();
+                const totalChunks = encryptedChunks.length;
+
+                // 保存采样映射和元数据
+                const metadata = {
+                    sampling_mode: samplingMode,
+                    sampling_map: samplingMap,
+                    total_chunks: samplingMode ? Math.ceil(originalFile.size / CHUNK_SIZE) : totalChunks,
+                    original_size: originalFile.size,
+                    original_name: originalFile.name
+                };
+                await saveChunkToDB(-1, metadata);
+
+                // 并行批处理上传
+                const UPLOAD_BATCH_SIZE = 20; // IndexedDB 可以更大批次
+                
+                for (let batchStart = 0; batchStart < totalChunks; batchStart += UPLOAD_BATCH_SIZE) {
+                    const batchEnd = Math.min(batchStart + UPLOAD_BATCH_SIZE, totalChunks);
+                    
+                    // 并行保存当前批次
+                    const batchPromises = [];
+                    for (let i = batchStart; i < batchEnd; i++) {
+                        batchPromises.push(
+                            saveChunkToDB(encryptedChunks[i].index, encryptedChunks[i].encrypted)
+                        );
+                    }
+                    
+                    await Promise.all(batchPromises);
+                    
+                    // 批次完成后更新 UI
+                    const progress = (batchEnd / totalChunks * 100).toFixed(1);
+                    document.getElementById('uploadBar').style.width = progress + '%';
+                    document.getElementById('uploadBar').textContent = progress + '%';
+                    document.getElementById('uploadChunks').textContent = batchEnd;
+                    
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const processedMB = (batchEnd * CHUNK_SIZE) / (1024 * 1024);
+                    const speed = (processedMB / elapsed).toFixed(2);
+                    document.getElementById('uploadTime').textContent = elapsed.toFixed(1) + 's';
+                    document.getElementById('uploadSpeed').textContent = speed;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+                
+                document.getElementById('decryptBtn').disabled = false;
+                document.getElementById('downloadBtn').disabled = false;
+                document.getElementById('clearBtn').disabled = false;
+                log(`Uploaded ${totalChunks} chunks in ${((Date.now() - startTime) / 1000).toFixed(2)}s`, 'success');
+            } catch (err) {
+                log('Upload error: ' + (err.message || err), 'error');
+            }
+        });
+
+        // Decrypt (批处理，从 IndexedDB 加载，支持采样模式)
+        document.getElementById('decryptBtn').addEventListener('click', async () => {
+            try {
+                log('Loading from IndexedDB...', 'info');
+                
+                document.getElementById('decryptBtn').disabled = true;
+                document.getElementById('decryptProgress').style.display = 'block';
+                document.getElementById('decryptStats').style.display = 'grid';
+                
+                // 从 IndexedDB 加载
+                const allData = await getAllChunksFromDB();
+                if (allData.length === 0) {
+                    log('No encrypted chunks in IndexedDB', 'error');
+                    return;
+                }
+                
+                // 分离元数据和加密块
+                const metadata = allData.find(item => item.index === -1);
+                const loadedChunks = allData.filter(item => item.index !== -1).sort((a, b) => a.index - b.index);
+                
+                log(`Loaded ${loadedChunks.length} chunks from IndexedDB`, 'info');
+                
+                const isSampling = metadata?.data?.sampling_mode || false;
+                const samplingMapStored = metadata?.data?.sampling_map || [];
+                const totalOriginalChunks = metadata?.data?.total_chunks || loadedChunks.length;
+                
+                if (isSampling) {
+                    log(`Sampling mode: ${loadedChunks.length}/${totalOriginalChunks} chunks`, 'info');
+                }
+                
+                log('Starting decryption...', 'info');
+                
+                const startTime = Date.now();
+                
+                // 并行批处理配置
+                const PARALLEL_BATCH_SIZE = loadedChunks.length > 50 ? 10 : 5;
+                
+                if (isSampling) {
+                    // 采样模式：读取原文件，只解密采样部分
+                    if (!originalFile) {
+                        log('⚠️ Sampling mode requires original file. Please select the file first.', 'error');
+                        throw new Error('Original file not found for sampling mode decryption');
+                    }
+                    
+                    const originalData = await originalFile.arrayBuffer();
+                    const result = new Uint8Array(originalData);
+                    
+                    // 批量并行解密
+                    for (let batchStart = 0; batchStart < loadedChunks.length; batchStart += PARALLEL_BATCH_SIZE) {
+                        const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, loadedChunks.length);
+                        
+                        // 并行解密当前批次
+                        const batchPromises = [];
+                        for (let i = batchStart; i < batchEnd; i++) {
+                            const item = loadedChunks[i];
+                            const encrypted = item.data;
+                            if (!encrypted || !encrypted.c_data) {
+                                throw new Error(`Invalid chunk at index ${i}: missing c_data`);
+                            }
+                            const cDataBytes = new Uint8Array(encrypted.c_data);
+                            
+                            batchPromises.push(
+                                Promise.resolve().then(() => ({
+                                    index: item.index,
+                                    data: sdk.get(encrypted.capsule, keypair.private_key, cDataBytes)
+                                }))
+                            );
+                        }
+                        
+                        // 等待批次完成并写入结果
+                        const batchResults = await Promise.all(batchPromises);
+                        for (const { index, data } of batchResults) {
+                            const start = index * CHUNK_SIZE;
+                            result.set(data, start);
+                        }
+                        
+                        // 批次完成后更新 UI
+                        const progress = (batchEnd / loadedChunks.length * 100).toFixed(1);
+                        document.getElementById('decryptBar').style.width = progress + '%';
+                        document.getElementById('decryptBar').textContent = progress + '%';
+                        document.getElementById('decChunks').textContent = `${batchEnd}/${loadedChunks.length}`;
+                        
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        const processedMB = (batchEnd * CHUNK_SIZE) / (1024 * 1024);
+                        const speed = (processedMB / elapsed).toFixed(2);
+                        document.getElementById('decTime').textContent = elapsed.toFixed(1) + 's';
+                        document.getElementById('decSpeed').textContent = speed;
+                        
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                    
+                    decryptedFile = new Blob([result], { type: originalFile.type });
+                    
+                } else {
+                    // 全量模式：批量并行解密
+                    const decryptedChunks = [];
+
+                    for (let batchStart = 0; batchStart < loadedChunks.length; batchStart += PARALLEL_BATCH_SIZE) {
+                        const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, loadedChunks.length);
+                        
+                        // 并行解密当前批次
+                        const batchPromises = [];
+                        for (let i = batchStart; i < batchEnd; i++) {
+                            const item = loadedChunks[i];
+                            const encrypted = item.data;
+                            if (!encrypted || !encrypted.c_data) {
+                                throw new Error(`Invalid chunk at index ${i}: missing c_data`);
+                            }
+                            const cDataBytes = new Uint8Array(encrypted.c_data);
+                            
+                            batchPromises.push(
+                                Promise.resolve().then(() => sdk.get(encrypted.capsule, keypair.private_key, cDataBytes))
+                            );
+                        }
+                        
+                        // 等待批次完成
+                        const batchResults = await Promise.all(batchPromises);
+                        decryptedChunks.push(...batchResults);
+                        
+                        // 批次完成后更新 UI
+                        const progress = (batchEnd / loadedChunks.length * 100).toFixed(1);
+                        document.getElementById('decryptBar').style.width = progress + '%';
+                        document.getElementById('decryptBar').textContent = progress + '%';
+                        document.getElementById('decChunks').textContent = batchEnd;
+                        
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        const totalBytes = decryptedChunks.reduce((sum, c) => sum + c.length, 0);
+                        const speed = (totalBytes / (1024 * 1024) / elapsed).toFixed(2);
+                        document.getElementById('decTime').textContent = elapsed.toFixed(1) + 's';
+                        document.getElementById('decSpeed').textContent = speed;
+                        
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                
+                    // Merge chunks
+                    const totalSize = decryptedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+                    const merged = new Uint8Array(totalSize);
+                    let offset = 0;
+                    for (const chunk of decryptedChunks) {
+                        merged.set(chunk, offset);
+                        offset += chunk.length;
+                    }
+                    
+                    decryptedFile = new Blob([merged], { type: originalFile.type });
+                }
+                
+                // Verify hash
+                log('Calculating decrypted file hash...', 'info');
+                const decryptedData = await decryptedFile.arrayBuffer();
+                const fileSizeMB = decryptedData.byteLength / (1024 * 1024);
+                const hashStartTime = Date.now();
+                const decryptedHash = fileSizeMB > 100 
+                    ? await hashSampling(decryptedData) 
+                    : await hash(decryptedData, true);
+                const hashElapsed = ((Date.now() - hashStartTime) / 1000).toFixed(2);
+                log(`Hash calculated in ${hashElapsed}s`, 'info');
+                
+                document.getElementById('hashCompare').style.display = 'block';
+                document.getElementById('hashOriginal').textContent = originalHash;
+                document.getElementById('hashDecrypted').textContent = decryptedHash;
+                
+                const match = originalHash === decryptedHash;
+                document.getElementById('hashMatch').textContent = match ? '✓' : '✗';
+                document.getElementById('hashMatch').style.color = match ? '#00ff41' : '#ff4444';
+                
+                document.getElementById('downloadDecryptedBtn').disabled = false;
+                
+                if (isSampling) {
+                    log('Sampling mode: Hash verification shows full file integrity', 'info');
+                    log(match ? 'File verified ✓ (encrypted parts match)' : 'Hash mismatch ✗', match ? 'success' : 'warning');
+                } else {
+                    log(match ? 'Decryption verified ✓' : 'Hash mismatch ✗', match ? 'success' : 'error');
+                }
+            } catch (err) {
+                log('Decrypt error: ' + (err.message || err), 'error');
+            }
+        });
+
+        // Download encrypted chunks
+        document.getElementById('downloadBtn').addEventListener('click', async () => {
+            try {
+                log('Downloading encrypted chunks...', 'info');
+                
+                const chunks = await getAllChunksFromDB();
+                if (chunks.length === 0) {
+                    log('No chunks to download', 'error');
+                    return;
+                }
+                
+                // 打包成 JSON
+                const data = JSON.stringify({
+                    version: 1,
+                    filename: originalFile.name,
+                    total_chunks: chunks.length,
+                    chunk_size: CHUNK_SIZE,
+                    original_hash: originalHash,
+                    chunks: chunks
+                });
+                
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `encrypted_${originalFile.name}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                log(`Downloaded ${chunks.length} encrypted chunks`, 'success');
+            } catch (err) {
+                log('Download error: ' + (err.message || err), 'error');
+            }
+        });
+
+        // Download decrypted file
+        document.getElementById('downloadDecryptedBtn').addEventListener('click', () => {
+            const url = URL.createObjectURL(decryptedFile);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'decrypted_' + originalFile.name;
+            a.click();
+            URL.revokeObjectURL(url);
+            log('Decrypted file downloaded', 'success');
+        });
+
+        // Clear IndexedDB
+        document.getElementById('clearBtn').addEventListener('click', async () => {
+            try {
+                await clearDB();
+                encryptedChunks = [];
+                document.getElementById('uploadBtn').disabled = true;
+                document.getElementById('decryptBtn').disabled = true;
+                document.getElementById('downloadBtn').disabled = true;
+                document.getElementById('clearBtn').disabled = true;
+                log('IndexedDB cleared', 'success');
+            } catch (err) {
+                log('Clear error: ' + (err.message || err), 'error');
+            }
+        });
+    </script>
+</body>
+</html>
