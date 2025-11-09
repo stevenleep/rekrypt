@@ -1,6 +1,5 @@
 # @stenvenleep/rekrypt
-
-REKRYPT：一个基于 Rust 的高性能加密库，原生支持代理重加密与 WASM。
+rekrypt 一个基于 Rust 的高性能代理重加密库，默认提供 WASM 构建。
 
 https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
 
