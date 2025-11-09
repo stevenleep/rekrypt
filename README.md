@@ -2,6 +2,9 @@
 
 REKRYPT：一个基于 Rust 的高性能加密库，原生支持代理重加密与 WASM。
 
+https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
+
+
 ## 快速开始
 
 #### 1. 构建 WASM 包
