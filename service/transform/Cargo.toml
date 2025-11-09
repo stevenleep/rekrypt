@@ -1,0 +1,20 @@
+[package]
+name = "rekrypt_transform"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+# 独立的工作空间，不继承父目录的工作空间
+
+[lib]
+name = "rekrypt_transform"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+recrypt = { path = "../../crates/recrypt-rs" }
+postcard = { version = "1.0", features = ["alloc"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = true

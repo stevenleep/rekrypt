@@ -368,6 +368,36 @@ impl EncryptSDK {
 
         serde_wasm_bindgen::to_value(&warning).map_err(CryptoError::SerdeWasmError)
     }
+
+    /// 序列化 Capsule 对象为字节（用于传输到代理服务）
+    /// 
+    /// 将 JS Capsule 对象序列化为 postcard 格式的字节数组
+    #[wasm_bindgen(js_name = serializeCapsule)]
+    pub fn serialize_capsule(&self, capsule: JsValue) -> Result<Vec<u8>, CryptoError> {
+        let capsule: Capsule = serde_wasm_bindgen::from_value(capsule)
+            .map_err(|_| CryptoError::InvalidCapsule)?;
+        
+        postcard::to_allocvec(&capsule)
+            .map_err(|e| CryptoError::new(
+                crate::errors::ErrorCode::SerdeError,
+                &format!("Failed to serialize capsule: {:?}", e)
+            ))
+    }
+
+    /// 反序列化字节为 Capsule 对象（从代理服务接收）
+    /// 
+    /// 将 postcard 格式的字节数组反序列化为 JS Capsule 对象
+    #[wasm_bindgen(js_name = deserializeCapsule)]
+    pub fn deserialize_capsule(&self, bytes: &[u8]) -> Result<JsValue, CryptoError> {
+        let capsule: Capsule = postcard::from_bytes(bytes)
+            .map_err(|e| CryptoError::new(
+                crate::errors::ErrorCode::SerdeError,
+                &format!("Failed to deserialize capsule: {:?}", e)
+            ))?;
+        
+        serde_wasm_bindgen::to_value(&capsule)
+            .map_err(CryptoError::SerdeWasmError)
+    }
 }
 
 // 辅助函数：从字节重建签名密钥对
