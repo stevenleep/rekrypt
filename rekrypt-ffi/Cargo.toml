@@ -1,0 +1,26 @@
+[package]
+name = "rekrypt-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "FFI bindings for rekrypt - C/CGO interface for proxy re-encryption"
+authors = ["stenvenleep"]
+license = "AGPL-3.0-or-later"
+
+[lib]
+name = "rekrypt_ffi"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+rekrypt = { path = "..", version = "0.2.0" }
+recrypt = { version = "0.14.1" }
+postcard = { version = "1.1", features = ["use-std"] }
+serde = { version = "1.0", features = ["derive"] }
+base64 = "0.22"
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
