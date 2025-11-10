@@ -126,17 +126,6 @@ See [docs/](docs/) for complete examples and API reference.
 - [Streaming Guide](docs/STREAMING.md) - Large file handling
 - [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment and scaling
 
-## Browser Support
-
-Chrome 57+ | Firefox 52+ | Safari 11+ | Edge 16+
-
-## Resources
-
-- [DeepWiki Documentation](https://deepwiki.com/stevenleep/rekrypt/1-overview)
-- [Crates.io](https://crates.io/crates/rekrypt)
-- [NPM](https://www.npmjs.com/package/rekrypt)
-- [Recrypt Library](https://github.com/IronCoreLabs/recrypt-rs)
-
 ## License
 
 AGPL-3.0
