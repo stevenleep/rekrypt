@@ -1,73 +1,144 @@
-# rekrypt
+# Rekrypt
 
-基于 Rust 的代理重加密库 (Proxy Re-Encryption)，提供 WASM 构建。[了解可查看 deepwiki 地址](https://deepwiki.com/stevenleep/rekrypt/1-overview)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![WebAssembly](https://img.shields.io/badge/wasm-ready-green.svg)](https://webassembly.org/)
+
+Professional proxy re-encryption library based on **Curve25519 (ECC)** for Rust and WebAssembly.
+
+[📚 Documentation on DeepWiki](https://deepwiki.com/stevenleep/rekrypt/1-overview)
 
 https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
 
-## 什么是代理重加密？
+## What is Proxy Re-Encryption?
 
-允许代理在**不解密**的情况下，将 Alice 加密的数据转换为 Bob 可解密的形式。
+Allows a semi-trusted proxy to transform ciphertext from one key to another **without learning the plaintext**.
 
 ```
-Alice 加密 → 转换密钥 → 代理转换 → Bob 解密
-          (Alice 授权)   (无需私钥)
+Alice encrypts → Transform Key → Proxy transforms → Bob decrypts
+                (Alice grants)   (Zero knowledge)
 ```
 
-**核心优势**：
-- **零信任代理** - 代理服务器无法看到明文，只能转换
-- **密钥隔离** - Alice 私钥永不暴露，Bob 也无法反推 Alice 私钥
-- **灵活授权** - 可随时撤销授权，无需重新加密数据
-- **一对多共享** - 同一份密文可授权给多个用户
-- **降低开销** - 无需为每个用户重新加密，节省存储和计算
+**Core Technology**: Curve25519 (ECC) - Modern elliptic curve cryptography, NOT RSA
 
-## 快速开始
+Benefits: Zero-trust proxy, key isolation, flexible delegation, one-to-many sharing.
+
+## Proxy Re-Encryption Flow
+
+```
+  Alice          Business Server       Proxy Server            Bob
+    │                  │                     │                   │
+    │ 1. Encrypt       │                     │                   │
+    │  encrypt(data,   │                     │                   │
+    │  alice.pubKey)   │                     │                   │
+    │                  │                     │                   │
+    │ 2. Upload        │                     │                   │
+    ├─────────────────►│                     │                   │
+    │  Ciphertext +    │ Store encrypted     │                   │
+    │  Capsule         │ data                │                   │
+    │                  │                     │                   │
+    │ 3. Grant Access  │                     │                   │
+    │  transformKey =  │                     │                   │
+    │  generateTransformKey(                 │                   │
+    │    alice.privKey,│                     │                   │
+    │    bob.pubKey)   │                     │                   │
+    │                  │                     │                   │
+    │ 4. Send Key      │                     │                   │
+    ├─────────────────►│                     │                   │
+    │                  │                     │                   │
+    │                  │ 5. Request Transform│                   │
+    │                  ├────────────────────►│                   │
+    │                  │  Ciphertext +       │                   │
+    │                  │  TransformKey       │                   │
+    │                  │                     │                   │
+    │                  │                     │ 6. Transform      │
+    │                  │                     │  (Zero Knowledge) │
+    │                  │                     │  ⚠️ CANNOT see    │
+    │                  │                     │     plaintext     │
+    │                  │                     │                   │
+    │                  │ 7. Transformed      │                   │
+    │                  │◄────────────────────┤                   │
+    │                  │  Ciphertext         │                   │
+    │                  │  (for Bob)          │                   │
+    │                  │                     │                   │
+    │                  │        8. Bob requests access           │
+    │                  │◄───────────────────────────────────────┤
+    │                  │                     │                   │
+    │                  │ 9. Send Transformed │                   │
+    │                  ├───────────────────────────────────────►│
+    │                  │                     │                   │
+    │                  │                     │    10. Decrypt    │
+    │                  │                     │    decryptDelegated(
+    │                  │                     │      bob.privKey) │
+    │                  │                     │                   │
+    │                  │                     │   ┌──────────┐    │
+    │                  │                     │   │Plaintext │◄───┤
+    │                  │                     │   └──────────┘    │
+    
+Key Points:
+• Alice's private key never leaves her device
+• Proxy transforms without seeing plaintext
+• Bob decrypts without Alice's key
+• Business server stores encrypted data only
+```
+
+## Installation
 
 ```bash
-# 构建 WASM
+# NPM
+npm install rekrypt
+
+# Cargo
+cargo add rekrypt
+
+# Build from source
 wasm-pack build --target web --release
-
-# 运行示例
-cd examples && pnpm install
-
-# 文件加密演示
-pnpm dev
-
-# 代理重加密演示
-pnpm demo
 ```
 
-## 使用示例
+## Quick Start
 
 ```javascript
-import init, { EncryptSDK } from './pkg/rekrypt.js';
+import init, { EncryptSDK } from 'rekrypt';
+
 await init();
 const sdk = new EncryptSDK();
 
-// 1. 生成密钥对
-const alice = sdk.gen();
-const bob = sdk.gen();
+// Generate keypair
+const alice = sdk.generateKeypair();
 
-// 2. Alice 加密数据
-const message = new TextEncoder().encode('Secret message');
-const encrypted = sdk.put(message, alice.public_key);
+// Encrypt
+const data = new TextEncoder().encode('Secret');
+const encrypted = sdk.encrypt(data, alice.public_key);
 
-// 3. Alice 生成转换密钥（授权 Bob）
-const transformKey = sdk.auth(
-    alice.private_key,
-    bob.public_key,
-    encrypted.capsule.signing_key_pair
-);
-
-// 4. Bob 解密（无需 Alice 私钥）
-const decrypted = sdk.getByAuth(
-    encrypted.capsule,
-    transformKey,
-    bob.private_key,
-    encrypted.c_data
-);
+// Decrypt
+const decrypted = sdk.decrypt(encrypted.capsule, alice.private_key, encrypted.c_data);
 ```
 
-## 许可证
+See [docs/](docs/) for complete examples and API reference.
 
-[AGPL-3.0](LICENSE)
+## Documentation
 
+- [API Reference](docs/API.md) - Complete API documentation
+- [Usage Examples](docs/EXAMPLES.md) - Code examples
+- [Architecture & Design](docs/ARCHITECTURE.md) - System architecture and cryptographic design
+- [Internal Implementation](docs/INTERNALS.md) - Deep dive into implementation details
+- [Security Guide](docs/SECURITY.md) - Security best practices
+- [Streaming Guide](docs/STREAMING.md) - Large file handling
+- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment and scaling
+
+## Browser Support
+
+Chrome 57+ | Firefox 52+ | Safari 11+ | Edge 16+
+
+## Resources
+
+- [DeepWiki Documentation](https://deepwiki.com/stevenleep/rekrypt/1-overview)
+- [Crates.io](https://crates.io/crates/rekrypt)
+- [NPM](https://www.npmjs.com/package/rekrypt)
+- [Recrypt Library](https://github.com/IronCoreLabs/recrypt-rs)
+
+## License
+
+AGPL-3.0
+
+Copyright (C) 2025 stenvenleep
