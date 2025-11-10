@@ -1,6 +1,6 @@
 # rekrypt
 
-基于 Rust 的代理重加密库 (Proxy Re-Encryption)，提供 WASM 构建。
+基于 Rust 的代理重加密库 (Proxy Re-Encryption)，提供 WASM 构建。[了解可查看 deepwiki 地址](https://deepwiki.com/stevenleep/rekrypt/1-overview)
 
 https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
 
