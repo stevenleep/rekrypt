@@ -10,13 +10,17 @@ https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
 
 ## Installation
 
-```bash
-# NPM
-npm install rekrypt
+> **⚠️ Notice:** This project is under active development. NPM and Cargo packages are not yet published. Please build from source for now.
 
-# Cargo
+```bash
+# NPM (coming soon)
+pnpm add @stevenleep/rekrypt
+
+# Cargo (coming soon)
 cargo add rekrypt
 ```
+
+For now, please build from source (see below).
 
 ## Build from Source
 

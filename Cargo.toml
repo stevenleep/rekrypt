@@ -2,11 +2,11 @@
 name = "rekrypt"
 version = "0.2.0"
 edition = "2021"
-description = "代理重加密技术的 WebAssembly SDK - Proxy Re-Encryption for Web"
-authors = ["Your Name <your.email@example.com>"]
-license = "AGPL-3.0"
-repository = "https://github.com/yourusername/rekrypt"
-homepage = "https://github.com/yourusername/rekrypt"
+description = "Professional proxy re-encryption library based on Curve25519 for Rust and WebAssembly"
+authors = ["stevenleep"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/stevenleep/rekrypt"
+homepage = "https://github.com/stevenleep/rekrypt"
 keywords = ["cryptography", "proxy-re-encryption", "wasm", "encryption", "security"]
 categories = ["cryptography", "wasm", "web-programming"]
 
