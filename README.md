@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 [![WebAssembly](https://img.shields.io/badge/wasm-ready-green.svg)](https://webassembly.org/)
 
-Professional proxy re-encryption library based on **Curve25519 (ECC)** for Rust and WebAssembly. [📚 Documentation on DeepWiki](https://deepwiki.com/stevenleep/rekrypt/1-overview)
+Professional proxy re-encryption library based on **Curve25519 (ECC)** for Rust and WebAssembly. 
 
 https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
 
