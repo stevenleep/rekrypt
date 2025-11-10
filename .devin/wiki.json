@@ -1,0 +1,117 @@
+{
+  "repo_notes": [
+    {
+      "content": "Rekrypt: Proxy re-encryption SDK based on Curve25519 (ECC). 1832 lines of Rust code across 11 modules. Exports to WASM (512KB) with TypeScript support. 7 comprehensive documentation files (3342 lines)."
+    }
+  ],
+  "pages": [
+    {
+      "title": "Project Overview",
+      "purpose": "High-level understanding of Rekrypt SDK, its purpose, and key features",
+      "page_notes": [
+        {
+          "content": "Proxy re-encryption library enabling zero-knowledge ciphertext transformation. Core: Curve25519 + AES-256-GCM hybrid encryption. Supports WASM (browser) and native Rust. Key features: streaming encryption, password-protected keystore, BIP39 mnemonic recovery."
+        }
+      ]
+    },
+    {
+      "title": "Core Technology",
+      "purpose": "Cryptographic foundation and algorithms",
+      "page_notes": [
+        {
+          "content": "Asymmetric: Curve25519 (NOT RSA). Keys: 32-byte private, 64-byte public. Symmetric: AES-256-GCM. Signatures: Ed25519. KDF: PBKDF2 (600k iterations) for passwords, HKDF for key derivation. Mnemonic: BIP39 24-word."
+        }
+      ]
+    },
+    {
+      "title": "Module Structure",
+      "purpose": "Source code organization",
+      "page_notes": [
+        {
+          "content": "11 modules in src/: lib.rs (406 lines, API entry), crypto.rs (176, primitives), keys.rs (83, BIP39), keystore.rs (129, password encryption), streaming.rs (182, chunked), helpers.rs (135, utilities), validation.rs (210, security checks), serialization.rs (121, recrypt adapters), types.rs (97, data structures), errors.rs (117, error handling), i18n.rs (176, EN/CN)."
+        }
+      ]
+    },
+    {
+      "title": "Public API",
+      "purpose": "Exported JavaScript/TypeScript interfaces",
+      "page_notes": [
+        {
+          "content": "3 classes: EncryptSDK (main), StreamEncryptor, StreamDecryptor. Key methods: generateKeypair(), encrypt(), decrypt(), recoverKeypair(), createKeystore(), unlockKeystore(). 30+ utility methods. See docs/API.md."
+        }
+      ]
+    },
+    {
+      "title": "Proxy Re-Encryption Flow",
+      "purpose": "Complete delegation workflow with four parties",
+      "page_notes": [
+        {
+          "content": "Alice encrypts → Business Server stores → Alice generates transform key → Proxy Server transforms (zero-knowledge) → Bob decrypts. Transform happens server-side only (TransformKey cannot be safely serialized). See README.md sequence diagram."
+        }
+      ]
+    },
+    {
+      "title": "Key Recovery System",
+      "purpose": "All possible key recovery paths",
+      "page_notes": [
+        {
+          "content": "Mnemonic → Full Keypair (complete). Keystore + Password → Private Key or Full Keypair (no mnemonic). Private Key → Public Key (derivable). Only mnemonic can fully recover everything. Methods: recoverKeypair(), unlockKeystore(), recoverKeypairFromKeystore(), reconstructKeypair(), derivePublicKey()."
+        }
+      ]
+    },
+    {
+      "title": "Security Architecture",
+      "purpose": "Security mechanisms and protections",
+      "page_notes": [
+        {
+          "content": "Memory: Auto-zeroization (zeroize crate). Timing: Constant-time comparisons (subtle crate). Replay: Timestamp + UUID + sequence validation. Integrity: HMAC-SHA256 for all critical data. Encryption: AES-256-GCM (AEAD). KDF: PBKDF2 600k iterations. See docs/SECURITY.md."
+        }
+      ]
+    },
+    {
+      "title": "Streaming Encryption",
+      "purpose": "Large file processing via chunking",
+      "page_notes": [
+        {
+          "content": "Default 1MB chunks. Each chunk independently encrypted with unique nonce. StreamEncryptor/StreamDecryptor classes with stateful chunk counters. Supports files of any size. See docs/STREAMING.md for Web Worker integration."
+        }
+      ]
+    },
+    {
+      "title": "Hybrid Encryption Design",
+      "purpose": "Why combine proxy re-encryption with AES",
+      "page_notes": [
+        {
+          "content": "Step 1: Generate random plaintext P via recrypt. Step 2: Encrypt P to recipient's public key. Step 3: Derive AES key K from P. Step 4: Encrypt actual data with AES-256-GCM using K. Result: Fast symmetric encryption + flexible delegation. See docs/ARCHITECTURE.md."
+        }
+      ]
+    },
+    {
+      "title": "Production Deployment",
+      "purpose": "Three-tier production architecture",
+      "page_notes": [
+        {
+          "content": "Tier 1: Client (WASM in browser). Tier 2: Business Server (authentication, access control, encrypted storage, request_id deduplication). Tier 3: Proxy Server (stateless transformation, zero-knowledge, network isolated). Database: PostgreSQL for metadata, S3 for large ciphertext. See docs/DEPLOYMENT.md for complete setup."
+        }
+      ]
+    },
+    {
+      "title": "Important Implementation Details",
+      "purpose": "Critical technical decisions and constraints",
+      "page_notes": [
+        {
+          "content": "TransformKey: Cannot serialize (recrypt limitation), server-side only. Nonce: Random 96-bit (not counter) to avoid reset issues. Capsule overhead: ~800 bytes. PBKDF2: 600k iterations = ~1-2sec. u64 serialized as string (JS safe integer limit). Zeroization: All sensitive data auto-cleared. See docs/INTERNALS.md."
+        }
+      ]
+    },
+    {
+      "title": "Build and Package",
+      "purpose": "Build process and outputs",
+      "page_notes": [
+        {
+          "content": "WASM: wasm-pack build --target web --release. Output: 512KB wasm + JS bindings + TS definitions. Rust: cargo build --release. Optimizations: LTO, opt-level=z, strip=true, wasm-opt -O4. Target: web (ES modules), node possible."
+        }
+      ]
+    }
+  ]
+}
