@@ -4,11 +4,53 @@
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 [![WebAssembly](https://img.shields.io/badge/wasm-ready-green.svg)](https://webassembly.org/)
 
-Professional proxy re-encryption library based on **Curve25519 (ECC)** for Rust and WebAssembly.
-
-[📚 Documentation on DeepWiki](https://deepwiki.com/stevenleep/rekrypt/1-overview)
+Professional proxy re-encryption library based on **Curve25519 (ECC)** for Rust and WebAssembly. [📚 Documentation on DeepWiki](https://deepwiki.com/stevenleep/rekrypt/1-overview)
 
 https://github.com/user-attachments/assets/64e1568e-75d8-4266-8e52-345594fe212f
+
+## Installation
+
+```bash
+# NPM
+npm install rekrypt
+
+# Cargo
+cargo add rekrypt
+
+# Build from source
+wasm-pack build --target web --release
+```
+
+## Quick Start
+
+```javascript
+import init, { EncryptSDK } from 'rekrypt';
+
+await init();
+const sdk = new EncryptSDK();
+
+// Generate keypair
+const alice = sdk.generateKeypair();
+
+// Encrypt
+const data = new TextEncoder().encode('Secret');
+const encrypted = sdk.encrypt(data, alice.public_key);
+
+// Decrypt
+const decrypted = sdk.decrypt(encrypted.capsule, alice.private_key, encrypted.c_data);
+```
+
+See [docs/](docs/) for complete examples and API reference.
+
+## Documentation
+
+- [API Reference](docs/API.md) - Complete API documentation
+- [Usage Examples](docs/EXAMPLES.md) - Code examples
+- [Architecture & Design](docs/ARCHITECTURE.md) - System architecture and cryptographic design
+- [Internal Implementation](docs/INTERNALS.md) - Deep dive into implementation details
+- [Security Guide](docs/SECURITY.md) - Security best practices
+- [Streaming Guide](docs/STREAMING.md) - Large file handling
+- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment and scaling
 
 ## What is Proxy Re-Encryption?
 
@@ -81,50 +123,6 @@ Key Points:
 • Bob decrypts without Alice's key
 • Business server stores encrypted data only
 ```
-
-## Installation
-
-```bash
-# NPM
-npm install rekrypt
-
-# Cargo
-cargo add rekrypt
-
-# Build from source
-wasm-pack build --target web --release
-```
-
-## Quick Start
-
-```javascript
-import init, { EncryptSDK } from 'rekrypt';
-
-await init();
-const sdk = new EncryptSDK();
-
-// Generate keypair
-const alice = sdk.generateKeypair();
-
-// Encrypt
-const data = new TextEncoder().encode('Secret');
-const encrypted = sdk.encrypt(data, alice.public_key);
-
-// Decrypt
-const decrypted = sdk.decrypt(encrypted.capsule, alice.private_key, encrypted.c_data);
-```
-
-See [docs/](docs/) for complete examples and API reference.
-
-## Documentation
-
-- [API Reference](docs/API.md) - Complete API documentation
-- [Usage Examples](docs/EXAMPLES.md) - Code examples
-- [Architecture & Design](docs/ARCHITECTURE.md) - System architecture and cryptographic design
-- [Internal Implementation](docs/INTERNALS.md) - Deep dive into implementation details
-- [Security Guide](docs/SECURITY.md) - Security best practices
-- [Streaming Guide](docs/STREAMING.md) - Large file handling
-- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment and scaling
 
 ## License
 
