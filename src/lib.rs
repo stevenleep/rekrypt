@@ -7,7 +7,7 @@ mod helpers;
 mod i18n;
 mod keys;
 mod keystore;
-mod serialization;
+pub mod serialization;
 mod streaming;
 mod types;
 mod validation;

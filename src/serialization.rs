@@ -98,24 +98,107 @@ impl SerializableEncryptedValue {
     }
 }
 
-/// Placeholder for TransformKey (cannot be serialized)
+use recrypt::api::{EncryptedTempKey, HashedValue, TransformKey};
+
+/// Serializable representation of TransformKey
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SerializableTransformKey {
-    pub opaque_data: Vec<u8>,
+    pub ephemeral_public_key_x: Vec<u8>,  // 32 bytes
+    pub ephemeral_public_key_y: Vec<u8>,  // 32 bytes
+    pub to_public_key_x: Vec<u8>,         // 32 bytes
+    pub to_public_key_y: Vec<u8>,         // 32 bytes
+    pub encrypted_temp_key: Vec<u8>,      // 384 bytes
+    pub hashed_temp_key: Vec<u8>,         // 128 bytes
+    pub public_signing_key: Vec<u8>,      // 32 bytes
+    pub signature: Vec<u8>,               // 64 bytes
 }
 
 impl SerializableTransformKey {
+    /// Creates from TransformKey using public API
+    pub fn from_transform_key(tk: &TransformKey) -> Result<Self, CryptoError> {
+        let (ephem_x, ephem_y) = tk.ephemeral_public_key().bytes_x_y();
+        let (to_x, to_y) = tk.to_public_key().bytes_x_y();
+        
+        Ok(Self {
+            ephemeral_public_key_x: ephem_x.to_vec(),
+            ephemeral_public_key_y: ephem_y.to_vec(),
+            to_public_key_x: to_x.to_vec(),
+            to_public_key_y: to_y.to_vec(),
+            encrypted_temp_key: tk.encrypted_temp_key().bytes().to_vec(),
+            hashed_temp_key: tk.hashed_temp_key().bytes().to_vec(),
+            public_signing_key: tk.public_signing_key().bytes().to_vec(),
+            signature: tk.signature().bytes().to_vec(),
+        })
+    }
+
+    /// Converts back to TransformKey
+    pub fn to_transform_key(&self) -> Result<TransformKey, CryptoError> {
+        // Reconstruct PublicKeys
+        let mut ephem_x = [0u8; 32];
+        let mut ephem_y = [0u8; 32];
+        ephem_x.copy_from_slice(&self.ephemeral_public_key_x);
+        ephem_y.copy_from_slice(&self.ephemeral_public_key_y);
+        let ephemeral_public_key = PublicKey::new((ephem_x, ephem_y))?;
+
+        let mut to_x = [0u8; 32];
+        let mut to_y = [0u8; 32];
+        to_x.copy_from_slice(&self.to_public_key_x);
+        to_y.copy_from_slice(&self.to_public_key_y);
+        let to_public_key = PublicKey::new((to_x, to_y))?;
+
+        // Reconstruct EncryptedTempKey (384 bytes)
+        if self.encrypted_temp_key.len() != 384 {
+            return Err(CryptoError::InvalidData);
+        }
+        let mut etk_bytes = [0u8; 384];
+        etk_bytes.copy_from_slice(&self.encrypted_temp_key);
+        let encrypted_temp_key = EncryptedTempKey::new(etk_bytes);
+
+        // Reconstruct HashedValue (128 bytes)
+        if self.hashed_temp_key.len() != 128 {
+            return Err(CryptoError::InvalidData);
+        }
+        let mut hv_bytes = [0u8; 128];
+        hv_bytes.copy_from_slice(&self.hashed_temp_key);
+        let hashed_temp_key = HashedValue::new(hv_bytes)?;
+
+        // Reconstruct PublicSigningKey (32 bytes)
+        if self.public_signing_key.len() != 32 {
+            return Err(CryptoError::InvalidData);
+        }
+        let mut psk_bytes = [0u8; 32];
+        psk_bytes.copy_from_slice(&self.public_signing_key);
+        let public_signing_key = PublicSigningKey::new_from_slice(&psk_bytes)?;
+
+        // Reconstruct Ed25519Signature (64 bytes)
+        if self.signature.len() != 64 {
+            return Err(CryptoError::InvalidData);
+        }
+        let mut sig_bytes = [0u8; 64];
+        sig_bytes.copy_from_slice(&self.signature);
+        let signature = Ed25519Signature::new_from_slice(&sig_bytes)?;
+
+        // Reconstruct TransformKey using public constructor
+        Ok(TransformKey::new(
+            ephemeral_public_key,
+            to_public_key,
+            encrypted_temp_key,
+            hashed_temp_key,
+            public_signing_key,
+            signature,
+        ))
+    }
+
     pub fn placeholder() -> Self {
-        Self { opaque_data: Vec::new() }
-    }
-
-    #[allow(dead_code)]
-    pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        Self { opaque_data: bytes }
-    }
-
-    #[allow(dead_code)]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.opaque_data
+        Self {
+            ephemeral_public_key_x: vec![0; 32],
+            ephemeral_public_key_y: vec![0; 32],
+            to_public_key_x: vec![0; 32],
+            to_public_key_y: vec![0; 32],
+            encrypted_temp_key: vec![0; 384],
+            hashed_temp_key: vec![0; 128],
+            public_signing_key: vec![0; 32],
+            signature: vec![0; 64],
+        }
     }
 }
