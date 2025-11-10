@@ -11,42 +11,18 @@ use crate::i18n::I18n;
 use crate::types::{ExportWarning, KeypairResult};
 use crate::validation::check_and_normalize;
 
-/// Generates a new keypair using BIP39 mnemonic phrase.
-///
-/// Creates a 24-word mnemonic (256 bits of entropy) following BIP39 standard,
-/// then derives the cryptographic keypair using HKDF with a domain-specific
-/// context string to ensure key separation.
-///
-/// # Arguments
-/// * `passphrase` - Optional BIP39 passphrase for additional security
-/// * `_i18n` - Internationalization context (unused here but kept for consistency)
-///
-/// # Security Notes
-/// - Uses 24 words (256-bit entropy) which is more secure than 12 words
-/// - HKDF derivation ensures proper key separation from seed
-/// - Sensitive data is zeroized after use
+/// Generates keypair from 24-word BIP39 mnemonic
 pub fn generate_keypair(passphrase: &str, _i18n: &I18n) -> Result<KeypairResult, CryptoError> {
-    // Generate 24-word mnemonic (256 bits of entropy per BIP39)
     let mnemonic = Mnemonic::generate(24)?;
     let mnemonic_phrase = mnemonic.to_string();
-    
-    // Convert mnemonic to 512-bit seed using PBKDF2 (BIP39 standard)
     let seed = mnemonic.to_seed(passphrase);
     
-    // Derive 32-byte private key using HKDF with domain separation
-    let mut private_key_bytes = derive_key_hkdf(
-        &seed,
-        None,
-        b"recrypt-key-v1", // Domain-specific context for key separation
-        32,
-    )?;
+    let mut private_key_bytes = derive_key_hkdf(&seed, None, b"recrypt-key-v1", 32)?;
 
     let api = Recrypt::new();
-    let private_key = PrivateKey::new_from_slice(&private_key_bytes)
-        .map_err(|e| CryptoError::RecryptError(e))?;
+    let private_key = PrivateKey::new_from_slice(&private_key_bytes)?;
     let public_key = api.compute_public_key(&private_key)?;
     
-    // Zeroize sensitive key material from memory
     private_key_bytes.zeroize();
 
     let public_key_bytes = {
@@ -61,35 +37,16 @@ pub fn generate_keypair(passphrase: &str, _i18n: &I18n) -> Result<KeypairResult,
     })
 }
 
-/// Recovers a keypair from a BIP39 mnemonic phrase.
-///
-/// Validates and normalizes the mnemonic, then derives the same keypair
-/// that was originally generated. Must use the same passphrase that was
-/// used during generation, or empty string if no passphrase was used.
-///
-/// # Arguments
-/// * `mnemonic` - BIP39 mnemonic phrase (12 or 24 words)
-/// * `passphrase` - BIP39 passphrase (use empty string if none)
-/// * `i18n` - Internationalization context for error messages
+/// Recovers keypair from BIP39 mnemonic
 pub fn recover_keypair(mnemonic: &str, passphrase: &str, i18n: &I18n) -> Result<KeypairResult, CryptoError> {
-    // Normalize mnemonic (trim, lowercase, validate characters)
     let normalized = check_and_normalize(mnemonic, i18n)?;
     let mnemonic = Mnemonic::parse_in(Language::English, &normalized)?;
-
-    // Derive seed using same process as generation
     let seed = mnemonic.to_seed(passphrase);
     
-    // Derive private key using same HKDF parameters
-    let mut private_key_bytes = derive_key_hkdf(
-        &seed,
-        None,
-        b"recrypt-key-v1", // Must match generation
-        32,
-    )?;
+    let mut private_key_bytes = derive_key_hkdf(&seed, None, b"recrypt-key-v1", 32)?;
 
     let api = Recrypt::new();
-    let private_key = PrivateKey::new_from_slice(&private_key_bytes)
-        .map_err(|e| CryptoError::RecryptError(e))?;
+    let private_key = PrivateKey::new_from_slice(&private_key_bytes)?;
     let public_key = api.compute_public_key(&private_key)?;
 
     private_key_bytes.zeroize();
@@ -106,7 +63,7 @@ pub fn recover_keypair(mnemonic: &str, passphrase: &str, i18n: &I18n) -> Result<
     })
 }
 
-/// 导出私钥（带安全警告）
+/// Exports private key with security warnings
 pub fn export_private_key_with_warning(
     keypair: &KeypairResult,
     i18n: &I18n,

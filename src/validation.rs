@@ -4,35 +4,25 @@
 use crate::errors::{CryptoError, ErrorCode};
 use crate::i18n::I18n;
 
-/// Validates password strength according to modern security standards.
-///
-/// Requirements:
-/// - Length: 8-128 characters
-/// - Complexity: At least 3 of the following:
-///   * Lowercase letters
-///   * Uppercase letters
-///   * Digits
-///   * Special characters
-///
-/// These rules balance security with usability while preventing common
-/// weak passwords.
+/// Validates password strength (12-128 chars, 3+ char types)
 pub fn validate_password_strength(password: &str, i18n: &I18n) -> Result<(), CryptoError> {
-    if password.len() < 8 {
+    const MIN_PASSWORD_LENGTH: usize = 12;
+    const MAX_PASSWORD_LENGTH: usize = 128;
+    
+    if password.len() < MIN_PASSWORD_LENGTH {
         return Err(CryptoError::new(
             ErrorCode::WeakPassword,
             i18n.error_msg("password_too_short"),
         ));
     }
     
-    // Cap at 128 to prevent DoS via extremely long passwords in PBKDF2
-    if password.len() > 128 {
+    if password.len() > MAX_PASSWORD_LENGTH {
         return Err(CryptoError::new(
             ErrorCode::WeakPassword,
             i18n.error_msg("password_too_long"),
         ));
     }
 
-    // Require at least 3 of 4 character types for complexity
     let has_lowercase = password.chars().any(|c| c.is_lowercase());
     let has_uppercase = password.chars().any(|c| c.is_uppercase());
     let has_digit = password.chars().any(|c| c.is_ascii_digit());
@@ -53,7 +43,7 @@ pub fn validate_password_strength(password: &str, i18n: &I18n) -> Result<(), Cry
     Ok(())
 }
 
-/// 检查并标准化助记词
+/// Checks and normalizes mnemonic (lowercase, trim)
 pub fn check_and_normalize(mnemonic: &str, i18n: &I18n) -> Result<String, CryptoError> {
     let normalized = mnemonic.trim().to_lowercase();
     if !normalized.chars().all(|c| c.is_alphabetic() || c.is_whitespace()) {
@@ -66,7 +56,7 @@ pub fn check_and_normalize(mnemonic: &str, i18n: &I18n) -> Result<String, Crypto
     Ok(normalized)
 }
 
-/// 验证公钥
+/// Validates public key format (64 bytes, not all zeros/0xFF)
 pub fn validate_public_key(public_key: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
     if public_key.len() != 64 {
         return Err(CryptoError::new(
@@ -82,10 +72,17 @@ pub fn validate_public_key(public_key: &[u8], i18n: &I18n) -> Result<(), CryptoE
         ));
     }
     
+    if public_key.iter().all(|&b| b == 0xFF) {
+        return Err(CryptoError::new(
+            ErrorCode::InvalidPublicKey,
+            i18n.error_msg("invalid_public_key"),
+        ));
+    }
+    
     Ok(())
 }
 
-/// 验证私钥
+/// Validates private key (32 bytes)
 pub fn validate_private_key(private_key: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
     if private_key.len() != 32 {
         return Err(CryptoError::new(
@@ -96,7 +93,7 @@ pub fn validate_private_key(private_key: &[u8], i18n: &I18n) -> Result<(), Crypt
     Ok(())
 }
 
-/// 验证数据不为空
+/// Validates data is not empty
 pub fn validate_data_not_empty(data: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
     if data.is_empty() {
         return Err(CryptoError::new(
@@ -107,7 +104,7 @@ pub fn validate_data_not_empty(data: &[u8], i18n: &I18n) -> Result<(), CryptoErr
     Ok(())
 }
 
-/// 验证版本号
+/// Validates version
 pub fn validate_version(version: u8, expected: u8, i18n: &I18n) -> Result<(), CryptoError> {
     if version != expected {
         return Err(CryptoError::new(
@@ -118,7 +115,7 @@ pub fn validate_version(version: u8, expected: u8, i18n: &I18n) -> Result<(), Cr
     Ok(())
 }
 
-/// 验证 IV 长度
+/// Validates IV length (12 bytes)
 pub fn validate_iv(iv: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
     if iv.len() != 12 {
         return Err(CryptoError::new(
@@ -129,17 +126,10 @@ pub fn validate_iv(iv: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
     Ok(())
 }
 
-/// Validates KDF iteration count to balance security and DoS prevention.
-///
-/// Enforces bounds on PBKDF2 iteration count:
-/// - Minimum (100k): Ensures adequate protection against brute-force
-/// - Maximum (10M): Prevents DoS attacks via computational exhaustion
-///
-/// These bounds are based on OWASP recommendations and typical hardware
-/// capabilities as of 2023-2024.
+/// Validates KDF iterations (100k-10M)
 pub fn validate_kdf_iterations(iterations: u32, i18n: &I18n) -> Result<(), CryptoError> {
-    const MIN_ITERATIONS: u32 = 100_000;  // OWASP minimum for PBKDF2-SHA256
-    const MAX_ITERATIONS: u32 = 10_000_000; // Prevent DoS
+    const MIN_ITERATIONS: u32 = 100_000;
+    const MAX_ITERATIONS: u32 = 10_000_000;
     
     if iterations < MIN_ITERATIONS || iterations > MAX_ITERATIONS {
         return Err(CryptoError::new(
@@ -153,6 +143,68 @@ pub fn validate_kdf_iterations(iterations: u32, i18n: &I18n) -> Result<(), Crypt
             ),
         ));
     }
+    Ok(())
+}
+
+/// Validates timestamp (replay attack prevention)
+pub fn validate_timestamp(
+    client_timestamp: u64,
+    max_age_seconds: u64,
+    i18n: &I18n,
+) -> Result<(), CryptoError> {
+    let current_time_ms = js_sys::Date::now() as u64;
+    const CLOCK_SKEW_MS: u64 = 5 * 60 * 1000;
+    
+    if client_timestamp > current_time_ms + CLOCK_SKEW_MS {
+        return Err(CryptoError::new(
+            ErrorCode::InvalidInput,
+            i18n.error_msg("timestamp_future"),
+        ));
+    }
+    
+    let max_age_ms = max_age_seconds * 1000;
+    if current_time_ms > client_timestamp + max_age_ms {
+        return Err(CryptoError::new(
+            ErrorCode::InvalidInput,
+            i18n.error_msg("timestamp_too_old"),
+        ));
+    }
+    
+    Ok(())
+}
+
+/// Validates request ID (UUID v4 format)
+pub fn validate_request_id(request_id: &str, i18n: &I18n) -> Result<(), CryptoError> {
+    if request_id.len() != 36 {
+        return Err(CryptoError::new(
+            ErrorCode::InvalidInput,
+            i18n.error_msg("invalid_request_id"),
+        ));
+    }
+    
+    if request_id.chars().nth(8) != Some('-')
+        || request_id.chars().nth(13) != Some('-')
+        || request_id.chars().nth(18) != Some('-')
+        || request_id.chars().nth(23) != Some('-')
+    {
+        return Err(CryptoError::new(
+            ErrorCode::InvalidInput,
+            i18n.error_msg("invalid_request_id"),
+        ));
+    }
+    
+    for (i, c) in request_id.chars().enumerate() {
+        if i == 8 || i == 13 || i == 18 || i == 23 {
+            continue;
+        }
+        if !c.is_ascii_hexdigit() {
+            return Err(CryptoError::new(
+                ErrorCode::InvalidInput,
+                i18n.error_msg("invalid_request_id"),
+            ));
+        }
+    }
+    
     Ok(())
 }
 

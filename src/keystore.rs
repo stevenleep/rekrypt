@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2025 stenvenleep
 
-use crate::crypto::{aes_decrypt, aes_encrypt, compute_mac, derive_key_pbkdf2, generate_iv, generate_salt, verify_mac};
+use crate::crypto::{aes_decrypt, aes_encrypt, compute_hmac, derive_key_pbkdf2, generate_iv, generate_salt, verify_mac};
 use crate::errors::{CryptoError, ErrorCode};
 use crate::i18n::I18n;
 use crate::types::{CipherParams, Keystore, KeystoreCrypto, KdfParams};
 use crate::validation::{validate_kdf_iterations, validate_password_strength, validate_private_key, validate_iv};
 use zeroize::Zeroize;
 
-/// 创建 Keystore（加密存储私钥）
+/// Creates encrypted keystore
 pub fn create_keystore(
     private_key: &[u8],
     password: &str,
@@ -20,26 +20,19 @@ pub fn create_keystore(
 
     let salt = generate_salt();
     let iv = generate_iv();
-
-    // Use 600,000 iterations for PBKDF2 (OWASP recommendation as of 2023)
-    // This provides strong protection against brute-force attacks
     let iterations = 600_000u32;
-    let dklen = 32; // 256-bit key for AES-256
+    let dklen = 32;
 
     let mut key = derive_key_pbkdf2(password.as_bytes(), &salt, iterations, dklen);
-
     let ciphertext = aes_encrypt(&key, &iv, private_key, i18n)?;
 
-    // Compute MAC over all critical parameters to prevent tampering.
-    // This ensures integrity of the encrypted data and prevents parameter
-    // manipulation attacks (e.g., lowering iteration count).
     let version_bytes = [1u8];
     let iterations_bytes = iterations.to_le_bytes();
     let dklen_bytes = (dklen as u32).to_le_bytes();
     let cipher_name = b"aes-256-gcm";
     let kdf_name = b"pbkdf2-hmac-sha256";
     
-    let mut mac_data = compute_mac(&[
+    let mut mac_data = compute_hmac(&key, &[
         &ciphertext,
         &salt,
         &iv,
@@ -50,7 +43,6 @@ pub fn create_keystore(
         kdf_name,
     ]);
 
-    // Zeroize sensitive key material to prevent memory disclosure
     key.zeroize();
     
     let keystore = Keystore {
@@ -76,7 +68,7 @@ pub fn create_keystore(
     Ok(keystore)
 }
 
-/// 从 Keystore 恢复私钥
+/// Recovers private key from keystore
 pub fn recover_from_keystore(
     keystore: &Keystore,
     password: &str,
@@ -105,7 +97,7 @@ pub fn recover_from_keystore(
     let cipher_name = keystore.crypto.cipher.as_bytes();
     let kdf_name = keystore.crypto.kdf.as_bytes();
     
-    let computed_mac = compute_mac(&[
+    let computed_mac = compute_hmac(&key, &[
         &keystore.crypto.ciphertext,
         &keystore.crypto.kdfparams.salt,
         &keystore.crypto.cipherparams.iv,
@@ -116,7 +108,6 @@ pub fn recover_from_keystore(
         kdf_name,
     ]);
 
-    // Verify MAC before decryption to prevent padding oracle attacks
     if let Err(e) = verify_mac(&computed_mac, &keystore.crypto.mac, i18n) {
         key.zeroize();
         return Err(e);

@@ -4,6 +4,7 @@
 .vscode/
 pkg
 node_modules
+.pnpm-store/
 target/
 # Binaries
 *.exe

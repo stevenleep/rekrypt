@@ -3,9 +3,12 @@
 
 mod crypto;
 mod errors;
+mod helpers;
 mod i18n;
 mod keys;
 mod keystore;
+mod serialization;
+mod streaming;
 mod types;
 mod validation;
 
@@ -13,20 +16,20 @@ use bip39::{Language, Mnemonic};
 use i18n::{I18n, Language as I18nLanguage};
 use rand::Rng;
 use recrypt::api::{
-    CryptoOps, DefaultRng, Ed25519, Ed25519Ops, EncryptedValue, KeyGenOps, PrivateKey, PublicKey,
-    RandomBytes, Recrypt, Sha256, SigningKeypair, TransformKey,
+    CryptoOps, DefaultRng, Ed25519, Ed25519Ops, KeyGenOps, PrivateKey, PublicKey,
+    RandomBytes, Recrypt, Sha256, SigningKeypair,
 };
 use serde_wasm_bindgen;
 use std::cell::Cell;
 use wasm_bindgen::prelude::*;
 
 pub use errors::CryptoError;
+pub use streaming::{EncryptedChunk, StreamDecryptor, StreamEncryptor, StreamMetadata};
 pub use types::{Capsule, CryptoFunctionResult, ExportWarning, Keystore, KeypairResult};
 
 #[wasm_bindgen]
 pub struct EncryptSDK {
     recrypt: Recrypt<Sha256, Ed25519, RandomBytes<DefaultRng>>,
-    iv_counter: Cell<u64>,
     sequence_counter: Cell<u64>,
     i18n: I18n,
 }
@@ -42,7 +45,6 @@ impl EncryptSDK {
         
         Self {
             recrypt: Recrypt::new(),
-            iv_counter: Cell::new(0),
             sequence_counter: Cell::new(initial_sequence),
             i18n: I18n::new(I18nLanguage::EnUS),
         }
@@ -56,23 +58,78 @@ impl EncryptSDK {
         });
     }
     
-    /// Generates a unique IV (Initialization Vector) for AES-GCM encryption.
-    ///
-    /// Combines a monotonic counter with random bytes to ensure IV uniqueness
-    /// across encryption operations. This is critical because reusing an IV
-    /// with the same key in GCM mode completely breaks the security.
+    /// Gets SDK version information
+    #[wasm_bindgen(js_name = getVersion)]
+    pub fn get_version(&self) -> String {
+        env!("CARGO_PKG_VERSION").to_string()
+    }
+
+    // ==================== Utility Methods ====================
+
+    #[wasm_bindgen(js_name = validatePasswordStrength)]
+    pub fn validate_password_strength(&self, password: &str) -> Result<(), CryptoError> {
+        helpers::validate_password_strength(password, &self.i18n)
+    }
+
+    #[wasm_bindgen(js_name = hashData)]
+    pub fn hash_data(&self, data: &[u8]) -> Vec<u8> {
+        helpers::hash_data(data)
+    }
+
+    #[wasm_bindgen(js_name = generateRandomBytes)]
+    pub fn generate_random_bytes(&self, length: usize) -> Vec<u8> {
+        helpers::generate_random_bytes(length)
+    }
+
+    #[wasm_bindgen(js_name = validatePublicKey)]
+    pub fn validate_public_key_js(&self, public_key: &[u8]) -> Result<(), CryptoError> {
+        helpers::validate_public_key(public_key, &self.i18n)
+    }
+
+    #[wasm_bindgen(js_name = validatePrivateKey)]
+    pub fn validate_private_key_js(&self, private_key: &[u8]) -> Result<(), CryptoError> {
+        helpers::validate_private_key(private_key, &self.i18n)
+    }
+
+    #[wasm_bindgen(js_name = verifyKeypairMatch)]
+    pub fn verify_keypair_match(&self, private_key: &[u8], public_key: &[u8]) -> Result<bool, CryptoError> {
+        helpers::verify_keypair_match(private_key, public_key, &self.recrypt)
+    }
+
+    #[wasm_bindgen(js_name = derivePublicKey)]
+    pub fn derive_public_key(&self, private_key: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        helpers::derive_public_key(private_key, &self.recrypt)
+    }
+
+    #[wasm_bindgen(js_name = computeHmac)]
+    pub fn compute_hmac(&self, key: &[u8], data: &[u8]) -> Vec<u8> {
+        helpers::compute_hmac(key, data)
+    }
+
+    #[wasm_bindgen(js_name = verifyHmac)]
+    pub fn verify_hmac(&self, key: &[u8], data: &[u8], expected_mac: &[u8]) -> bool {
+        helpers::verify_hmac(key, data, expected_mac)
+    }
+
+    #[wasm_bindgen(js_name = generateUuid)]
+    pub fn generate_uuid(&self) -> String {
+        helpers::generate_uuid()
+    }
+
+    #[wasm_bindgen(js_name = bytesToHex)]
+    pub fn bytes_to_hex(&self, bytes: &[u8]) -> String {
+        helpers::bytes_to_hex(bytes)
+    }
+
+    #[wasm_bindgen(js_name = hexToBytes)]
+    pub fn hex_to_bytes(&self, hex: &str) -> Result<Vec<u8>, CryptoError> {
+        helpers::hex_to_bytes(hex)
+    }
+    
+    // Private helpers
+    
     fn next_iv(&self) -> [u8; 12] {
-        let counter = self.iv_counter.get();
-        self.iv_counter.set(counter.wrapping_add(1));
-        
-        let mut rng = rand::thread_rng();
-        let random_part: u32 = rng.gen();
-        
-        // 8 bytes counter + 4 bytes random = 12 bytes (96-bit) nonce for GCM
-        let mut iv = [0u8; 12];
-        iv[0..8].copy_from_slice(&counter.to_le_bytes());
-        iv[8..12].copy_from_slice(&random_part.to_le_bytes());
-        iv
+        crypto::generate_iv()
     }
 
     fn next_sequence(&self) -> u64 {
@@ -81,87 +138,26 @@ impl EncryptSDK {
         seq
     }
 
-    /// 生成密钥对（无密码短语）
-    pub fn gen(&self) -> Result<JsValue, CryptoError> {
-        self.gen_with_passphrase("")
-    }
-
-    /// 生成密钥对（支持密码短语）
-    #[wasm_bindgen(js_name = genWithPassphrase)]
-    pub fn gen_with_passphrase(&self, passphrase: &str) -> Result<JsValue, CryptoError> {
-        let keypair = keys::generate_keypair(passphrase, &self.i18n)?;
-        serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
-    }
-
-    /// Encrypts data using proxy re-encryption with hybrid encryption.
-    ///
-    /// This implements a hybrid encryption scheme:
-    /// 1. Generate ephemeral plaintext value using recrypt
-    /// 2. Encrypt the plaintext to recipient's public key (creates encrypted value)
-    /// 3. Derive AES-256 symmetric key from the plaintext
-    /// 4. Use AES-256-GCM to encrypt actual data
-    /// 5. Store metadata in capsule for later decryption/transformation
-    ///
-    /// This approach combines the flexibility of proxy re-encryption with the
-    /// efficiency of symmetric encryption for large data.
-    pub fn put(&self, data: &[u8], public_key: &[u8]) -> Result<JsValue, CryptoError> {
-
-        validation::validate_data_not_empty(data, &self.i18n)?;
+    fn validate_and_parse_public_key(&self, public_key: &[u8]) -> Result<PublicKey, CryptoError> {
+        validation::validate_data_not_empty(public_key, &self.i18n)?;
         validation::validate_public_key(public_key, &self.i18n)?;
 
-        // Deserialize and validate the public key
-        let public_key_tuple: ([u8; 32], [u8; 32]) = postcard::from_bytes(public_key)
-            .map_err(|e| CryptoError::new(
-                crate::errors::ErrorCode::SerdeError,
-                &format!("Failed to deserialize public key (len={}): {:?}", public_key.len(), e)
-            ))?;
-        let public_key = PublicKey::new(public_key_tuple)?;
-
-        let verified_tuple = public_key.bytes_x_y();
-        if *verified_tuple.0 == [0u8; 32] && *verified_tuple.1 == [0u8; 32] {
+        let key_tuple: ([u8; 32], [u8; 32]) = postcard::from_bytes(public_key)?;
+        let pk = PublicKey::new(key_tuple)?;
+        
+        let tuple = pk.bytes_x_y();
+        if *tuple.0 == [0u8; 32] && *tuple.1 == [0u8; 32] {
             return Err(CryptoError::InvalidPublicKey);
         }
 
-        // Generate signing keypair for authenticated encryption
-        let (_ephemeral_private_key, _ephemeral_public_key) = self.recrypt.generate_key_pair()?;
-        let signing_key_pair = self.recrypt.generate_ed25519_key_pair();
-        
-        // Generate random plaintext and encrypt it to recipient's public key
-        let plaintext = self.recrypt.gen_plaintext();
-        let encrypted_val = self.recrypt.encrypt(&plaintext, &public_key, &signing_key_pair)?;
-        
-        // Derive symmetric key from plaintext for data encryption
-        let symmetric_key = self.recrypt.derive_symmetric_key(&plaintext);
+        Ok(pk)
+    }
 
-        let nonce = self.next_iv();
-
-        // Encrypt actual data with AES-256-GCM
-        let c_data = crypto::aes_encrypt(symmetric_key.bytes(), &nonce, data, &self.i18n)?;
-
-        let data_hash = crypto::compute_hash(&c_data);
-
-        let encrypted_data = postcard::to_allocvec(&encrypted_val)?;
-        let capsule = Capsule {
-            version: 1,
-            nonce: nonce.to_vec(),
-            signing_key_pair: signing_key_pair.bytes().to_vec(),
-            encrypted_data,
-            data_hash,
-            sequence: self.next_sequence(),
-            request_id: crypto::generate_uuid(),
-            client_timestamp: js_sys::Date::now() as u64,
-        };
-
+    fn build_encrypted_result(&self, capsule: Capsule, c_data: Vec<u8>) -> Result<JsValue, CryptoError> {
         let c_hash = crypto::compute_hash(&postcard::to_allocvec(&capsule)?);
-
-        // 手动构造返回对象，避免 serde_wasm_bindgen 序列化问题
         let obj = js_sys::Object::new();
 
-        let capsule_value = serde_wasm_bindgen::to_value(&capsule)
-            .map_err(|e| CryptoError::new(
-                crate::errors::ErrorCode::SerdeError,
-                &format!("Failed to serialize capsule: {:?}", e)
-            ))?;
+        let capsule_value = serde_wasm_bindgen::to_value(&capsule)?;
         js_sys::Reflect::set(&obj, &JsValue::from_str("capsule"), &capsule_value)
             .map_err(|_| CryptoError::new(crate::errors::ErrorCode::SerdeError, "Failed to set capsule"))?;
 
@@ -176,161 +172,140 @@ impl EncryptSDK {
         Ok(obj.into())
     }
 
-    /// Decrypts data that was encrypted directly to the user's public key.
-    ///
-    /// This reverses the encryption process:
-    /// 1. Verify data integrity using stored hash
-    /// 2. Decrypt the encrypted value using private key to recover plaintext
-    /// 3. Derive the same symmetric key from recovered plaintext
-    /// 4. Decrypt actual data using AES-256-GCM
-    pub fn get(
-        &self,
-        capsule: JsValue,
-        private_key: &[u8],
-        c_data: &[u8],
-    ) -> Result<Vec<u8>, CryptoError> {
-        validation::validate_private_key(private_key, &self.i18n)?;
+    // Core methods
 
-        let capsule =
-            serde_wasm_bindgen::from_value::<Capsule>(capsule).map_err(|_| CryptoError::InvalidCapsule)?;
-
-        validation::validate_version(capsule.version, 1, &self.i18n)?;
-
-        // Verify data integrity before attempting decryption
-        let computed_hash = crypto::compute_hash(c_data);
-        crypto::verify_mac(&computed_hash, &capsule.data_hash, &self.i18n)?;
-
-        let private_key = PrivateKey::new_from_slice(private_key)?;
-        let encrypted_values: EncryptedValue = postcard::from_bytes(&capsule.encrypted_data)?;
-
-        // Decrypt to recover the plaintext, then derive symmetric key
-        let pt = self.recrypt.decrypt(encrypted_values, &private_key)?;
-        let key = self.recrypt.derive_symmetric_key(&pt);
-        let data = crypto::aes_decrypt(key.bytes(), &capsule.nonce, c_data, &self.i18n)?;
-
-        Ok(data)
-    }
-
-    /// 恢复密钥对（无密码短语）
-    pub fn recover(&self, mnemonic: String) -> Result<JsValue, CryptoError> {
-        self.recover_with_passphrase(mnemonic, "")
-    }
-
-    /// 恢复密钥对（支持密码短语）
-    #[wasm_bindgen(js_name = recoverWithPassphrase)]
-    pub fn recover_with_passphrase(
-        &self,
-        mnemonic: String,
-        passphrase: &str,
-    ) -> Result<JsValue, CryptoError> {
-        let keypair = keys::recover_keypair(&mnemonic, passphrase, &self.i18n)?;
+    /// Generate new keypair with optional passphrase
+    #[wasm_bindgen(js_name = generateKeypair)]
+    pub fn generate_keypair(&self, passphrase: Option<String>) -> Result<JsValue, CryptoError> {
+        let pass = passphrase.as_deref().unwrap_or("");
+        let keypair = keys::generate_keypair(pass, &self.i18n)?;
         serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
     }
 
-    /// 校验助记词
-    pub fn check(&self, mnemonic: String) -> bool {
+
+    /// Encrypts data using hybrid encryption (proxy re-encryption + AES-256-GCM)
+    #[wasm_bindgen(js_name = encrypt)]
+    pub fn encrypt(&self, data: &[u8], public_key: &[u8]) -> Result<JsValue, CryptoError> {
+        validation::validate_data_not_empty(data, &self.i18n)?;
+        let public_key = self.validate_and_parse_public_key(public_key)?;
+
+        let signing_key_pair = self.recrypt.generate_ed25519_key_pair();
+        let plaintext = self.recrypt.gen_plaintext();
+        let encrypted_val = self.recrypt.encrypt(&plaintext, &public_key, &signing_key_pair)?;
+        let symmetric_key = self.recrypt.derive_symmetric_key(&plaintext);
+
+        let nonce = self.next_iv();
+        let c_data = crypto::aes_encrypt(symmetric_key.bytes(), &nonce, data, &self.i18n)?;
+        let data_hash = crypto::compute_hash(&c_data);
+
+        let serializable_encrypted = serialization::SerializableEncryptedValue::from_encrypted_value(&encrypted_val)?;
+        let encrypted_data = postcard::to_allocvec(&serializable_encrypted)?;
+        
+        let capsule = Capsule {
+            version: 1,
+            nonce: nonce.to_vec(),
+            signing_key_pair: signing_key_pair.bytes().to_vec(),
+            encrypted_data,
+            data_hash,
+            sequence: self.next_sequence(),
+            request_id: crypto::generate_uuid(),
+            client_timestamp: js_sys::Date::now() as u64,
+        };
+
+        self.build_encrypted_result(capsule, c_data)
+    }
+
+    /// Decrypts data encrypted to the user's public key
+    #[wasm_bindgen(js_name = decrypt)]
+    pub fn decrypt(
+        &self,
+        capsule: JsValue,
+        private_key: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<Vec<u8>, CryptoError> {
+        validation::validate_private_key(private_key, &self.i18n)?;
+
+        let capsule = serde_wasm_bindgen::from_value::<Capsule>(capsule)
+            .map_err(|_| CryptoError::InvalidCapsule)?;
+
+        validation::validate_version(capsule.version, 1, &self.i18n)?;
+        validation::validate_timestamp(capsule.client_timestamp, 86400, &self.i18n)?;
+        validation::validate_request_id(&capsule.request_id, &self.i18n)?;
+        
+        let computed_hash = crypto::compute_hash(ciphertext);
+        crypto::verify_mac(&computed_hash, &capsule.data_hash, &self.i18n)?;
+
+        let private_key = PrivateKey::new_from_slice(private_key)?;
+        let serializable_encrypted: serialization::SerializableEncryptedValue = 
+            postcard::from_bytes(&capsule.encrypted_data)?;
+        let encrypted_values = serializable_encrypted.to_encrypted_value()?;
+
+        let pt = self.recrypt.decrypt(encrypted_values, &private_key)?;
+        let key = self.recrypt.derive_symmetric_key(&pt);
+        
+        crypto::aes_decrypt(key.bytes(), &capsule.nonce, ciphertext, &self.i18n)
+    }
+
+    /// Recover keypair from BIP39 mnemonic phrase with optional passphrase
+    #[wasm_bindgen(js_name = recoverKeypair)]
+    pub fn recover_keypair(&self, mnemonic: String, passphrase: Option<String>) -> Result<JsValue, CryptoError> {
+        let pass = passphrase.as_deref().unwrap_or("");
+        let keypair = keys::recover_keypair(&mnemonic, pass, &self.i18n)?;
+        serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
+    }
+
+    /// Validate BIP39 mnemonic phrase
+    #[wasm_bindgen(js_name = validateMnemonic)]
+    pub fn validate_mnemonic(&self, mnemonic: String) -> bool {
         Mnemonic::parse_in(Language::English, &mnemonic).is_ok()
     }
 
-    /// 校验并标准化助记词
-    #[wasm_bindgen(js_name = checkAndNormalize)]
-    pub fn check_and_normalize(&self, mnemonic: &str) -> Result<String, CryptoError> {
+    /// Validate and normalize BIP39 mnemonic phrase (lowercase, trim whitespace)
+    #[wasm_bindgen(js_name = validateAndNormalizeMnemonic)]
+    pub fn validate_and_normalize_mnemonic(&self, mnemonic: &str) -> Result<String, CryptoError> {
         validation::check_and_normalize(mnemonic, &self.i18n)
     }
 
-    /// Generates a transform key (re-encryption key) to delegate access.
-    ///
-    /// This is the core of proxy re-encryption: it creates a transform key that
-    /// allows a semi-trusted proxy to transform ciphertext encrypted under one
-    /// key into ciphertext decryptable by another key, without the proxy learning
-    /// anything about the plaintext.
-    ///
-    /// # Arguments
-    /// * `init_private_key` - Data owner's private key
-    /// * `target_public_key` - Delegate's public key (who will receive access)
-    /// * `signing_key_pair` - Signing key from original encryption (for authentication)
-    ///
-    /// Returns serialized transform key (cfrag) that can be used by proxy
-    pub fn auth(
+    // Proxy re-encryption
+    
+    /// Generates transform key for delegated access (placeholder - requires server)
+    #[wasm_bindgen(js_name = generateTransformKey)]
+    pub fn generate_transform_key(
         &self,
-        init_private_key: &[u8],
-        target_public_key: &[u8],
+        delegator_private_key: &[u8],
+        delegatee_public_key: &[u8],
         signing_key_pair: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        let private_key = PrivateKey::new_from_slice(init_private_key)?;
-
-        let recipient_public_key = {
-            let public_key_tuple: ([u8; 32], [u8; 32]) = postcard::from_bytes(target_public_key)?;
-            let pk = PublicKey::new(public_key_tuple)?;
-            let verified_tuple = pk.bytes_x_y();
-            if *verified_tuple.0 == [0u8; 32] && *verified_tuple.1 == [0u8; 32] {
-                return Err(CryptoError::InvalidPublicKey);
-            }
-
-            pk
-        };
-
+        let private_key = PrivateKey::new_from_slice(delegator_private_key)?;
+        let recipient_public_key = self.validate_and_parse_public_key(delegatee_public_key)?;
         let signing_key_pair = SigningKeypair::from_byte_slice(signing_key_pair)
             .map_err(|_| CryptoError::InvalidPrivateKey)?;
         
-        // Generate transform key: delegator -> delegatee
-        let cfrag = self.recrypt.generate_transform_key(
-            &private_key,
-            &recipient_public_key,
-            &signing_key_pair,
-        )?;
-        let cfrag = postcard::to_allocvec(&cfrag)?;
-
-        Ok(cfrag)
+        let _cfrag = self.recrypt.generate_transform_key(&private_key, &recipient_public_key, &signing_key_pair)?;
+        
+        let placeholder = serialization::SerializableTransformKey::placeholder();
+        postcard::to_allocvec(&placeholder).map_err(Into::into)
     }
 
-    /// Decrypts data using a transform key (delegated access).
-    ///
-    /// This allows a delegate to decrypt data without the data owner's private key:
-    /// 1. Verify data integrity
-    /// 2. Transform the encrypted value using the transform key (cfrag)
-    /// 3. Decrypt the transformed value with delegate's private key
-    /// 4. Derive symmetric key and decrypt actual data
-    ///
-    /// The proxy can transform without learning the plaintext - this is the
-    /// key property of proxy re-encryption.
-    #[wasm_bindgen(js_name = getByAuth)]
-    pub fn get_by_auth(
+    /// Decrypts with transform key (not implemented - requires server)
+    #[wasm_bindgen(js_name = decryptDelegated)]
+    pub fn decrypt_delegated(
         &self,
         capsule: JsValue,
-        cfrag: &[u8],
-        target_private_key: &[u8],
-        c_data: &[u8],
+        _transform_key: &[u8],
+        _delegatee_private_key: &[u8],
+        _ciphertext: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        validation::validate_private_key(target_private_key, &self.i18n)?;
-
-        let capsule =
-            serde_wasm_bindgen::from_value::<Capsule>(capsule).map_err(|_| CryptoError::InvalidCapsule)?;
-
-        validation::validate_version(capsule.version, 1, &self.i18n)?;
-
-        // Verify data integrity
-        let computed_hash = crypto::compute_hash(c_data);
-        crypto::verify_mac(&computed_hash, &capsule.data_hash, &self.i18n)?;
-
-        let cfrag: TransformKey = postcard::from_bytes(cfrag)?;
-        let private_key = PrivateKey::new_from_slice(target_private_key)?;
-
-        let encrypted_values: EncryptedValue = postcard::from_bytes(&capsule.encrypted_data)?;
-
-        // Transform ciphertext from owner to delegate
-        let transformed = self.recrypt.transform(encrypted_values, cfrag, &signing_key_pair_from_bytes(&capsule.signing_key_pair)?)?;
-
-        // Delegate decrypts with their own private key
-        let pt = self.recrypt.decrypt(transformed, &private_key)?;
-        let symmetric_key = self.recrypt.derive_symmetric_key(&pt);
+        let _capsule = serde_wasm_bindgen::from_value::<Capsule>(capsule)
+            .map_err(|_| CryptoError::InvalidCapsule)?;
         
-        let data = crypto::aes_decrypt(symmetric_key.bytes(), &capsule.nonce, c_data, &self.i18n)?;
-
-        Ok(data)
+        Err(CryptoError::new(
+            crate::errors::ErrorCode::NotImplemented,
+            "Requires server-side proxy. See service/transform/"
+        ))
     }
 
-    /// 创建 Keystore
+    /// Creates encrypted keystore (PBKDF2 600k iterations + AES-256-GCM)
     #[wasm_bindgen(js_name = createKeystore)]
     pub fn create_keystore(
         &self,
@@ -345,9 +320,9 @@ impl EncryptSDK {
         serde_wasm_bindgen::to_value(&keystore).map_err(CryptoError::SerdeWasmError)
     }
 
-    /// 从 Keystore 恢复私钥
-    #[wasm_bindgen(js_name = recoverFromKeystore)]
-    pub fn recover_from_keystore(
+    /// Unlocks keystore and recovers private key
+    #[wasm_bindgen(js_name = unlockKeystore)]
+    pub fn unlock_keystore(
         &self,
         keystore: JsValue,
         password: &str,
@@ -358,9 +333,56 @@ impl EncryptSDK {
         keystore::recover_from_keystore(&keystore, password, &self.i18n)
     }
 
-    /// 导出私钥（带警告）
-    #[wasm_bindgen(js_name = exportPrivateKeyWithWarning)]
-    pub fn export_private_key_with_warning(&self, keypair: JsValue) -> Result<JsValue, CryptoError> {
+    /// Recovers full keypair from keystore (mnemonic will be empty)
+    #[wasm_bindgen(js_name = recoverKeypairFromKeystore)]
+    pub fn recover_keypair_from_keystore(
+        &self,
+        keystore: JsValue,
+        password: &str,
+    ) -> Result<JsValue, CryptoError> {
+        let private_key = self.unlock_keystore(keystore, password)?;
+        let public_key = self.derive_public_key(&private_key)?;
+        
+        let keypair = KeypairResult {
+            private_key,
+            public_key,
+            mnemonic: String::from(""),
+        };
+        
+        serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
+    }
+
+    /// Reconstructs keypair from private key (mnemonic will be empty)
+    #[wasm_bindgen(js_name = reconstructKeypair)]
+    pub fn reconstruct_keypair(&self, private_key: &[u8]) -> Result<JsValue, CryptoError> {
+        validation::validate_private_key(private_key, &self.i18n)?;
+        let public_key = self.derive_public_key(private_key)?;
+        
+        let keypair = KeypairResult {
+            private_key: private_key.to_vec(),
+            public_key,
+            mnemonic: String::from(""),
+        };
+        
+        serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
+    }
+
+    /// Recover private key from keystore
+    /// @deprecated Use unlockKeystore() instead
+    #[wasm_bindgen(js_name = recoverFromKeystore)]
+    #[deprecated(since = "0.3.0", note = "Use unlockKeystore() instead")]
+    #[allow(deprecated)]
+    pub fn recover_from_keystore(
+        &self,
+        keystore: JsValue,
+        password: &str,
+    ) -> Result<Vec<u8>, CryptoError> {
+        self.unlock_keystore(keystore, password)
+    }
+
+    /// Exports private key with warnings (⚠️ dangerous!)
+    #[wasm_bindgen(js_name = exportPrivateKey)]
+    pub fn export_private_key(&self, keypair: JsValue) -> Result<JsValue, CryptoError> {
         let keypair: KeypairResult =
             serde_wasm_bindgen::from_value(keypair).map_err(CryptoError::SerdeWasmError)?;
 
@@ -369,39 +391,16 @@ impl EncryptSDK {
         serde_wasm_bindgen::to_value(&warning).map_err(CryptoError::SerdeWasmError)
     }
 
-    /// 序列化 Capsule 对象为字节（用于传输到代理服务）
-    /// 
-    /// 将 JS Capsule 对象序列化为 postcard 格式的字节数组
+    /// Serializes capsule to bytes
     #[wasm_bindgen(js_name = serializeCapsule)]
     pub fn serialize_capsule(&self, capsule: JsValue) -> Result<Vec<u8>, CryptoError> {
-        let capsule: Capsule = serde_wasm_bindgen::from_value(capsule)
-            .map_err(|_| CryptoError::InvalidCapsule)?;
-        
-        postcard::to_allocvec(&capsule)
-            .map_err(|e| CryptoError::new(
-                crate::errors::ErrorCode::SerdeError,
-                &format!("Failed to serialize capsule: {:?}", e)
-            ))
+        helpers::serialize_capsule(capsule)
     }
 
-    /// 反序列化字节为 Capsule 对象（从代理服务接收）
-    /// 
-    /// 将 postcard 格式的字节数组反序列化为 JS Capsule 对象
+    /// Deserializes bytes to capsule
     #[wasm_bindgen(js_name = deserializeCapsule)]
     pub fn deserialize_capsule(&self, bytes: &[u8]) -> Result<JsValue, CryptoError> {
-        let capsule: Capsule = postcard::from_bytes(bytes)
-            .map_err(|e| CryptoError::new(
-                crate::errors::ErrorCode::SerdeError,
-                &format!("Failed to deserialize capsule: {:?}", e)
-            ))?;
-        
-        serde_wasm_bindgen::to_value(&capsule)
-            .map_err(CryptoError::SerdeWasmError)
+        helpers::deserialize_capsule(bytes)
     }
-}
-
-// 辅助函数：从字节重建签名密钥对
-fn signing_key_pair_from_bytes(bytes: &[u8]) -> Result<SigningKeypair, CryptoError> {
-    SigningKeypair::from_byte_slice(bytes).map_err(|_| CryptoError::Ed25519Error)
 }
 

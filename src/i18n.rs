@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2025 stenvenleep
 
-/// 支持的语言
+//! Internationalization support
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
-    ZhCN,  // 简体中文
-    EnUS,  // 英语
+    ZhCN,
+    EnUS,
 }
 
 impl Default for Language {
@@ -14,7 +15,6 @@ impl Default for Language {
     }
 }
 
-/// 国际化消息
 pub struct I18n {
     lang: Language,
 }
@@ -24,7 +24,6 @@ impl I18n {
         Self { lang }
     }
     
-    /// 获取错误消息
     pub fn error_msg(&self, key: &str) -> &'static str {
         match self.lang {
             Language::ZhCN => self.error_msg_zh(key),
@@ -65,7 +64,7 @@ impl I18n {
             
             // 密码
             "weak_password" => "密码强度不足",
-            "password_too_short" => "密码至少需要 8 个字符",
+            "password_too_short" => "密码至少需要 12 个字符",
             "password_too_long" => "密码过长（最大 128 字符）",
             "password_complexity" => "密码必须包含至少 3 种：小写字母、大写字母、数字、特殊字符",
             
@@ -73,6 +72,9 @@ impl I18n {
             "invalid_input" => "输入无效",
             "data_empty" => "数据不能为空",
             "data_too_large" => "数据过大",
+            "timestamp_future" => "时间戳不能超前当前时间",
+            "timestamp_too_old" => "时间戳过期",
+            "invalid_request_id" => "无效的请求ID",
             
             // 版本
             "unsupported_version" => "不支持的版本",
@@ -125,7 +127,7 @@ impl I18n {
             
             // Password
             "weak_password" => "Password strength insufficient",
-            "password_too_short" => "Password must be at least 8 characters",
+            "password_too_short" => "Password must be at least 12 characters",
             "password_too_long" => "Password too long (max 128 characters)",
             "password_complexity" => "Password must contain at least 3 types: lowercase, uppercase, digits, special characters",
             
@@ -133,6 +135,9 @@ impl I18n {
             "invalid_input" => "Invalid input",
             "data_empty" => "Data cannot be empty",
             "data_too_large" => "Data too large",
+            "timestamp_future" => "Timestamp cannot be in the future",
+            "timestamp_too_old" => "Timestamp expired",
+            "invalid_request_id" => "Invalid request ID",
             
             // Version
             "unsupported_version" => "Unsupported version",
@@ -152,7 +157,6 @@ impl I18n {
         }
     }
     
-    /// 格式化消息（支持参数）
     pub fn format(&self, key: &str, args: &[(&str, &str)]) -> String {
         let template = self.error_msg(key);
         let mut result = template.to_string();

@@ -2,8 +2,8 @@
 // Copyright (C) 2025 stenvenleep
 
 use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, generic_array::GenericArray},
+    Aes256Gcm,
 };
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -11,56 +11,116 @@ use subtle::ConstantTimeEq;
 use crate::errors::{CryptoError, ErrorCode};
 use crate::i18n::I18n;
 
-/// AES-256-GCM 加密
-pub fn aes_encrypt(key: &[u8], iv: &[u8], plaintext: &[u8], i18n: &I18n) -> Result<Vec<u8>, CryptoError> {
+/// AES-256-GCM encryption with optional AAD
+pub fn aes_encrypt_with_aad(
+    key: &[u8],
+    iv: &[u8],
+    plaintext: &[u8],
+    aad: Option<&[u8]>,
+    i18n: &I18n,
+) -> Result<Vec<u8>, CryptoError> {
+    use aes_gcm::aead::Payload;
+    
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| CryptoError::new(ErrorCode::AesError, i18n.error_msg("aes_error")))?;
     
-    let nonce = Nonce::from_slice(iv);
+    // Create Nonce from slice - validate length first
+    if iv.len() != 12 {
+        return Err(CryptoError::new(ErrorCode::InvalidIV, i18n.error_msg("invalid_iv")));
+    }
+    let nonce = GenericArray::clone_from_slice(iv);
+    
+    let payload = if let Some(aad_data) = aad {
+        Payload {
+            msg: plaintext,
+            aad: aad_data,
+        }
+    } else {
+        Payload {
+            msg: plaintext,
+            aad: b"",
+        }
+    };
     
     cipher
-        .encrypt(nonce, plaintext)
+        .encrypt(&nonce, payload)
         .map_err(|_| CryptoError::new(ErrorCode::AesError, i18n.error_msg("aes_error")))
 }
 
-/// AES-256-GCM 解密
-pub fn aes_decrypt(key: &[u8], iv: &[u8], ciphertext: &[u8], i18n: &I18n) -> Result<Vec<u8>, CryptoError> {
+/// AES-256-GCM encryption
+pub fn aes_encrypt(key: &[u8], iv: &[u8], plaintext: &[u8], i18n: &I18n) -> Result<Vec<u8>, CryptoError> {
+    aes_encrypt_with_aad(key, iv, plaintext, None, i18n)
+}
+
+/// AES-256-GCM decryption with optional AAD
+pub fn aes_decrypt_with_aad(
+    key: &[u8],
+    iv: &[u8],
+    ciphertext: &[u8],
+    aad: Option<&[u8]>,
+    i18n: &I18n,
+) -> Result<Vec<u8>, CryptoError> {
+    use aes_gcm::aead::Payload;
+    
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| CryptoError::new(ErrorCode::DecryptionError, i18n.error_msg("decryption_error")))?;
     
-    let nonce = Nonce::from_slice(iv);
+    // Create Nonce from slice - validate length first
+    if iv.len() != 12 {
+        return Err(CryptoError::new(ErrorCode::InvalidIV, i18n.error_msg("invalid_iv")));
+    }
+    let nonce = GenericArray::clone_from_slice(iv);
+    
+    let payload = if let Some(aad_data) = aad {
+        Payload {
+            msg: ciphertext,
+            aad: aad_data,
+        }
+    } else {
+        Payload {
+            msg: ciphertext,
+            aad: b"",
+        }
+    };
     
     cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, payload)
         .map_err(|_| CryptoError::new(ErrorCode::DecryptionError, i18n.error_msg("decryption_error")))
 }
 
-/// 计算 SHA-256 哈希
+/// AES-256-GCM decryption
+pub fn aes_decrypt(key: &[u8], iv: &[u8], ciphertext: &[u8], i18n: &I18n) -> Result<Vec<u8>, CryptoError> {
+    aes_decrypt_with_aad(key, iv, ciphertext, None, i18n)
+}
+
+/// Computes SHA-256 hash
 pub fn compute_hash(data: &[u8]) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(data);
     hasher.finalize().to_vec()
 }
 
-/// Constant-time comparison to prevent timing attacks.
-///
-/// Uses constant-time equality check from the `subtle` crate to avoid
-/// leaking information about the comparison through timing side-channels.
-/// This is critical for MAC verification and password comparison.
+/// Constant-time comparison (prevents timing attacks)
 pub fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
     a.ct_eq(b).into()
 }
 
-/// 生成 MAC（消息认证码）
-pub fn compute_mac(parts: &[&[u8]]) -> Vec<u8> {
-    let mut hasher = Sha256::new();
+/// Computes HMAC-SHA256
+pub fn compute_hmac(key: &[u8], parts: &[&[u8]]) -> Vec<u8> {
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<Sha256>;
+    
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(key)
+        .expect("HMAC can take key of any size");
+    
     for part in parts {
-        hasher.update(part);
+        mac.update(part);
     }
-    hasher.finalize().to_vec()
+    
+    mac.finalize().into_bytes().to_vec()
 }
 
-/// 验证 MAC（使用常数时间比较）
+/// Verifies MAC (constant-time comparison)
 pub fn verify_mac(computed: &[u8], expected: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
     if !constant_time_compare(computed, expected) {
         return Err(CryptoError::new(
@@ -71,49 +131,24 @@ pub fn verify_mac(computed: &[u8], expected: &[u8], i18n: &I18n) -> Result<(), C
     Ok(())
 }
 
-/// 安全的密钥派生（PBKDF2-HMAC-SHA256）
-pub fn derive_key_pbkdf2(
-    password: &[u8],
-    salt: &[u8],
-    iterations: u32,
-    dklen: usize,
-) -> Vec<u8> {
+/// PBKDF2-HMAC-SHA256 key derivation
+pub fn derive_key_pbkdf2(password: &[u8], salt: &[u8], iterations: u32, dklen: usize) -> Vec<u8> {
     let mut key = vec![0u8; dklen];
     pbkdf2::pbkdf2_hmac::<Sha256>(password, salt, iterations, &mut key);
     key
 }
 
-/// Derives cryptographic keys using HKDF (HMAC-based Key Derivation Function).
-///
-/// HKDF is a simple key derivation function (KDF) based on HMAC. It's designed to
-/// extract strong cryptographic keys from weak input key material. This implementation
-/// uses SHA-256 as the underlying hash function.
-///
-/// # Arguments
-/// * `ikm` - Input Key Material (e.g., seed from mnemonic)
-/// * `salt` - Optional salt value (adds entropy to the derivation)
-/// * `info` - Context and application-specific information
-/// * `length` - Desired output key length in bytes
-pub fn derive_key_hkdf(
-    ikm: &[u8],
-    salt: Option<&[u8]>,
-    info: &[u8],
-    length: usize,
-) -> Result<Vec<u8>, CryptoError> {
+/// HKDF key derivation
+pub fn derive_key_hkdf(ikm: &[u8], salt: Option<&[u8]>, info: &[u8], length: usize) -> Result<Vec<u8>, CryptoError> {
     use hkdf::Hkdf;
-    
     let hk = Hkdf::<Sha256>::new(salt, ikm);
     let mut okm = vec![0u8; length];
     hk.expand(info, &mut okm)
         .map_err(|_| CryptoError::new(ErrorCode::KeyDerivationError, "Key derivation failed"))?;
-    
     Ok(okm)
 }
 
-/// Generates a cryptographically secure random UUID v4.
-///
-/// Used as a request identifier to prevent replay attacks. Each encryption
-/// operation gets a unique UUID that can be tracked for auditing purposes.
+/// Generates UUID v4
 pub fn generate_uuid() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -128,16 +163,14 @@ pub fn generate_uuid() -> String {
     )
 }
 
-/// 生成安全随机 IV
+/// Generates random IV (12 bytes)
 pub fn generate_iv() -> [u8; 12] {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
-    rng.gen()
+    rand::thread_rng().gen()
 }
 
-/// 生成安全随机 salt
+/// Generates random salt (16 bytes)
 pub fn generate_salt() -> [u8; 16] {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
-    rng.gen()
+    rand::thread_rng().gen()
 }
