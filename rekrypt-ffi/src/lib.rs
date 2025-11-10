@@ -2,9 +2,11 @@
 // Copyright (C) 2025 stenvenleep
 
 //! FFI bindings for rekrypt
-//! 
+//!
 //! This crate provides C-compatible FFI interface for the rekrypt library,
 //! enabling usage from Go (via CGO), Python (via ctypes/cffi), C++, and other languages.
+
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -12,8 +14,8 @@ use std::slice;
 use std::sync::Mutex;
 
 use recrypt::api::{
-    CryptoOps, DefaultRng, Ed25519, Ed25519Ops, KeyGenOps, PrivateKey, PublicKey,
-    RandomBytes, Recrypt, Sha256, SigningKeypair, TransformKey,
+    CryptoOps, DefaultRng, Ed25519, Ed25519Ops, KeyGenOps, PrivateKey, PublicKey, RandomBytes,
+    Recrypt, Sha256, SigningKeypair,
 };
 use rekrypt::serialization::{SerializableEncryptedValue, SerializableTransformKey};
 
@@ -54,7 +56,7 @@ fn clear_error() {
 }
 
 /// Get the last error message
-/// 
+///
 /// Returns a null-terminated C string pointer, or NULL if no error.
 /// The string is valid until the next error occurs.
 #[no_mangle]
@@ -91,12 +93,13 @@ pub extern "C" fn rekrypt_generate_keypair(
     }
 
     let recrypt = Recrypt::<Sha256, Ed25519, RandomBytes<DefaultRng>>::new();
-    let (private_key, public_key) = recrypt.generate_key_pair()
+    let (private_key, public_key) = recrypt
+        .generate_key_pair()
         .expect("Key generation should not fail");
 
     // Serialize keys
     let private_bytes = private_key.bytes().to_vec();
-    
+
     match postcard::to_allocvec(&public_key.bytes_x_y()) {
         Ok(public_bytes) => {
             unsafe {
@@ -114,9 +117,7 @@ pub extern "C" fn rekrypt_generate_keypair(
 
 /// Generate signing keypair
 #[no_mangle]
-pub extern "C" fn rekrypt_generate_signing_keypair(
-    out_signing_keypair: *mut ByteArray,
-) -> i32 {
+pub extern "C" fn rekrypt_generate_signing_keypair(out_signing_keypair: *mut ByteArray) -> i32 {
     clear_error();
 
     if out_signing_keypair.is_null() {
@@ -150,24 +151,21 @@ pub extern "C" fn rekrypt_generate_transform_key(
     clear_error();
 
     // Validate pointers
-    if delegator_private_key.is_null() 
-        || delegatee_public_key.is_null() 
+    if delegator_private_key.is_null()
+        || delegatee_public_key.is_null()
         || signing_keypair.is_null()
-        || out_transform_key.is_null() {
+        || out_transform_key.is_null()
+    {
         set_error("Null pointer in arguments");
         return -1;
     }
 
     // Convert to slices
-    let delegator_bytes = unsafe {
-        slice::from_raw_parts(delegator_private_key, delegator_private_key_len)
-    };
-    let delegatee_bytes = unsafe {
-        slice::from_raw_parts(delegatee_public_key, delegatee_public_key_len)
-    };
-    let signing_bytes = unsafe {
-        slice::from_raw_parts(signing_keypair, signing_keypair_len)
-    };
+    let delegator_bytes =
+        unsafe { slice::from_raw_parts(delegator_private_key, delegator_private_key_len) };
+    let delegatee_bytes =
+        unsafe { slice::from_raw_parts(delegatee_public_key, delegatee_public_key_len) };
+    let signing_bytes = unsafe { slice::from_raw_parts(signing_keypair, signing_keypair_len) };
 
     // Parse delegator private key
     let private_key = match PrivateKey::new_from_slice(delegator_bytes) {
@@ -206,13 +204,14 @@ pub extern "C" fn rekrypt_generate_transform_key(
 
     // Generate transform key
     let recrypt = Recrypt::<Sha256, Ed25519, RandomBytes<DefaultRng>>::new();
-    let transform_key = match recrypt.generate_transform_key(&private_key, &public_key, &signing_keypair) {
-        Ok(tk) => tk,
-        Err(e) => {
-            set_error(format!("Failed to generate transform key: {:?}", e));
-            return -1;
-        }
-    };
+    let transform_key =
+        match recrypt.generate_transform_key(&private_key, &public_key, &signing_keypair) {
+            Ok(tk) => tk,
+            Err(e) => {
+                set_error(format!("Failed to generate transform key: {:?}", e));
+                return -1;
+            }
+        };
 
     // Serialize transform key
     let serializable = match SerializableTransformKey::from_transform_key(&transform_key) {
@@ -230,7 +229,7 @@ pub extern "C" fn rekrypt_generate_transform_key(
             return -1;
         }
     };
-    
+
     unsafe {
         *out_transform_key = ByteArray::from_vec(serialized);
     }
@@ -253,8 +252,11 @@ pub extern "C" fn rekrypt_transform(
 ) -> i32 {
     clear_error();
 
-    if encrypted_value.is_null() || transform_key.is_null() 
-        || signing_keypair.is_null() || out_transformed.is_null() {
+    if encrypted_value.is_null()
+        || transform_key.is_null()
+        || signing_keypair.is_null()
+        || out_transformed.is_null()
+    {
         set_error("Null pointer in arguments");
         return -1;
     }
@@ -264,13 +266,14 @@ pub extern "C" fn rekrypt_transform(
     let signing_slice = unsafe { slice::from_raw_parts(signing_keypair, signing_keypair_len) };
 
     // Deserialize EncryptedValue
-    let serializable_encrypted: SerializableEncryptedValue = match postcard::from_bytes(encrypted_slice) {
-        Ok(s) => s,
-        Err(e) => {
-            set_error(format!("Failed to deserialize encrypted value: {}", e));
-            return -1;
-        }
-    };
+    let serializable_encrypted: SerializableEncryptedValue =
+        match postcard::from_bytes(encrypted_slice) {
+            Ok(s) => s,
+            Err(e) => {
+                set_error(format!("Failed to deserialize encrypted value: {}", e));
+                return -1;
+            }
+        };
 
     let encrypted_val = match serializable_encrypted.to_encrypted_value() {
         Ok(ev) => ev,
@@ -362,13 +365,18 @@ pub extern "C" fn rekrypt_proxy_transform(
 ) -> i32 {
     clear_error();
 
-    if alice_private_key.is_null() || alice_public_key.is_null() 
-        || bob_public_key.is_null() || signing_keypair.is_null() || out_result.is_null() {
+    if alice_private_key.is_null()
+        || alice_public_key.is_null()
+        || bob_public_key.is_null()
+        || signing_keypair.is_null()
+        || out_result.is_null()
+    {
         set_error("Null pointer in arguments");
         return -1;
     }
 
-    let alice_priv_bytes = unsafe { slice::from_raw_parts(alice_private_key, alice_private_key_len) };
+    let alice_priv_bytes =
+        unsafe { slice::from_raw_parts(alice_private_key, alice_private_key_len) };
     let alice_pub_bytes = unsafe { slice::from_raw_parts(alice_public_key, alice_public_key_len) };
     let bob_pub_bytes = unsafe { slice::from_raw_parts(bob_public_key, bob_public_key_len) };
     let signing_bytes = unsafe { slice::from_raw_parts(signing_keypair, signing_keypair_len) };
@@ -494,16 +502,22 @@ mod tests {
 
     #[test]
     fn test_generate_keypair() {
-        let mut private_key = ByteArray { data: std::ptr::null_mut(), len: 0 };
-        let mut public_key = ByteArray { data: std::ptr::null_mut(), len: 0 };
-        
+        let mut private_key = ByteArray {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
+        let mut public_key = ByteArray {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
+
         let result = rekrypt_generate_keypair(&mut private_key, &mut public_key);
         assert_eq!(result, 0);
         assert!(!private_key.data.is_null());
         assert!(!public_key.data.is_null());
         assert_eq!(private_key.len, 32);
         assert!(public_key.len > 0);
-        
+
         // Clean up
         rekrypt_free_byte_array(private_key);
         rekrypt_free_byte_array(public_key);
@@ -511,13 +525,16 @@ mod tests {
 
     #[test]
     fn test_generate_signing_keypair() {
-        let mut signing_keypair = ByteArray { data: std::ptr::null_mut(), len: 0 };
-        
+        let mut signing_keypair = ByteArray {
+            data: std::ptr::null_mut(),
+            len: 0,
+        };
+
         let result = rekrypt_generate_signing_keypair(&mut signing_keypair);
         assert_eq!(result, 0);
         assert!(!signing_keypair.data.is_null());
         assert_eq!(signing_keypair.len, 64);
-        
+
         rekrypt_free_byte_array(signing_keypair);
     }
 

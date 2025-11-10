@@ -2,7 +2,7 @@
 // Copyright (C) 2025 stenvenleep
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, generic_array::GenericArray},
+    aead::{generic_array::GenericArray, Aead, KeyInit},
     Aes256Gcm,
 };
 use sha2::{Digest, Sha256};
@@ -20,16 +20,19 @@ pub fn aes_encrypt_with_aad(
     i18n: &I18n,
 ) -> Result<Vec<u8>, CryptoError> {
     use aes_gcm::aead::Payload;
-    
+
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| CryptoError::new(ErrorCode::AesError, i18n.error_msg("aes_error")))?;
-    
+
     // Create Nonce from slice - validate length first
     if iv.len() != 12 {
-        return Err(CryptoError::new(ErrorCode::InvalidIV, i18n.error_msg("invalid_iv")));
+        return Err(CryptoError::new(
+            ErrorCode::InvalidIV,
+            i18n.error_msg("invalid_iv"),
+        ));
     }
     let nonce = GenericArray::clone_from_slice(iv);
-    
+
     let payload = if let Some(aad_data) = aad {
         Payload {
             msg: plaintext,
@@ -41,14 +44,19 @@ pub fn aes_encrypt_with_aad(
             aad: b"",
         }
     };
-    
+
     cipher
         .encrypt(&nonce, payload)
         .map_err(|_| CryptoError::new(ErrorCode::AesError, i18n.error_msg("aes_error")))
 }
 
 /// AES-256-GCM encryption
-pub fn aes_encrypt(key: &[u8], iv: &[u8], plaintext: &[u8], i18n: &I18n) -> Result<Vec<u8>, CryptoError> {
+pub fn aes_encrypt(
+    key: &[u8],
+    iv: &[u8],
+    plaintext: &[u8],
+    i18n: &I18n,
+) -> Result<Vec<u8>, CryptoError> {
     aes_encrypt_with_aad(key, iv, plaintext, None, i18n)
 }
 
@@ -61,16 +69,23 @@ pub fn aes_decrypt_with_aad(
     i18n: &I18n,
 ) -> Result<Vec<u8>, CryptoError> {
     use aes_gcm::aead::Payload;
-    
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|_| CryptoError::new(ErrorCode::DecryptionError, i18n.error_msg("decryption_error")))?;
-    
+
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| {
+        CryptoError::new(
+            ErrorCode::DecryptionError,
+            i18n.error_msg("decryption_error"),
+        )
+    })?;
+
     // Create Nonce from slice - validate length first
     if iv.len() != 12 {
-        return Err(CryptoError::new(ErrorCode::InvalidIV, i18n.error_msg("invalid_iv")));
+        return Err(CryptoError::new(
+            ErrorCode::InvalidIV,
+            i18n.error_msg("invalid_iv"),
+        ));
     }
     let nonce = GenericArray::clone_from_slice(iv);
-    
+
     let payload = if let Some(aad_data) = aad {
         Payload {
             msg: ciphertext,
@@ -82,14 +97,22 @@ pub fn aes_decrypt_with_aad(
             aad: b"",
         }
     };
-    
-    cipher
-        .decrypt(&nonce, payload)
-        .map_err(|_| CryptoError::new(ErrorCode::DecryptionError, i18n.error_msg("decryption_error")))
+
+    cipher.decrypt(&nonce, payload).map_err(|_| {
+        CryptoError::new(
+            ErrorCode::DecryptionError,
+            i18n.error_msg("decryption_error"),
+        )
+    })
 }
 
 /// AES-256-GCM decryption
-pub fn aes_decrypt(key: &[u8], iv: &[u8], ciphertext: &[u8], i18n: &I18n) -> Result<Vec<u8>, CryptoError> {
+pub fn aes_decrypt(
+    key: &[u8],
+    iv: &[u8],
+    ciphertext: &[u8],
+    i18n: &I18n,
+) -> Result<Vec<u8>, CryptoError> {
     aes_decrypt_with_aad(key, iv, ciphertext, None, i18n)
 }
 
@@ -109,14 +132,13 @@ pub fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
 pub fn compute_hmac(key: &[u8], parts: &[&[u8]]) -> Vec<u8> {
     use hmac::{Hmac, Mac};
     type HmacSha256 = Hmac<Sha256>;
-    
-    let mut mac = <HmacSha256 as Mac>::new_from_slice(key)
-        .expect("HMAC can take key of any size");
-    
+
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC can take key of any size");
+
     for part in parts {
         mac.update(part);
     }
-    
+
     mac.finalize().into_bytes().to_vec()
 }
 
@@ -139,7 +161,12 @@ pub fn derive_key_pbkdf2(password: &[u8], salt: &[u8], iterations: u32, dklen: u
 }
 
 /// HKDF key derivation
-pub fn derive_key_hkdf(ikm: &[u8], salt: Option<&[u8]>, info: &[u8], length: usize) -> Result<Vec<u8>, CryptoError> {
+pub fn derive_key_hkdf(
+    ikm: &[u8],
+    salt: Option<&[u8]>,
+    info: &[u8],
+    length: usize,
+) -> Result<Vec<u8>, CryptoError> {
     use hkdf::Hkdf;
     let hk = Hkdf::<Sha256>::new(salt, ikm);
     let mut okm = vec![0u8; length];

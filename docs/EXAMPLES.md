@@ -1,6 +1,8 @@
 # Usage Examples
 
-## Basic Encryption
+## WebAssembly (Browser/Node.js)
+
+### Basic Encryption
 
 ```javascript
 import init, { EncryptSDK } from 'rekrypt';
@@ -216,4 +218,146 @@ const keystore = sdk.createKeystore(keypair, password);
 // ⚠️ Note: No mnemonic available for recovery
 // User must keep keystore safe!
 ```
+
+## Native FFI Library
+
+### Go Example
+
+```go
+package main
+
+/*
+#cgo LDFLAGS: -L./rekrypt-ffi/lib/linux-x64 -lrekrypt_ffi
+#include <stdint.h>
+#include <stdlib.h>
+
+typedef struct {
+    uint8_t *data;
+    size_t len;
+} ByteArray;
+
+extern int rekrypt_version();
+extern int rekrypt_generate_keypair(ByteArray *out_private_key, ByteArray *out_public_key);
+extern void rekrypt_free_byte_array(ByteArray *arr);
+*/
+import "C"
+import (
+    "fmt"
+    "unsafe"
+)
+
+func main() {
+    // Get version
+    version := C.rekrypt_version()
+    fmt.Printf("Rekrypt FFI version: %d\n", version)
+    
+    // Generate keypair
+    var privKey, pubKey C.ByteArray
+    result := C.rekrypt_generate_keypair(&privKey, &pubKey)
+    
+    if result != 0 {
+        fmt.Println("Failed to generate keypair")
+        return
+    }
+    
+    defer C.rekrypt_free_byte_array(&privKey)
+    defer C.rekrypt_free_byte_array(&pubKey)
+    
+    // Convert to Go bytes
+    privKeyBytes := C.GoBytes(unsafe.Pointer(privKey.data), C.int(privKey.len))
+    pubKeyBytes := C.GoBytes(unsafe.Pointer(pubKey.data), C.int(pubKey.len))
+    
+    fmt.Printf("Private key: %d bytes\n", len(privKeyBytes))
+    fmt.Printf("Public key: %d bytes\n", len(pubKeyBytes))
+}
+```
+
+### Python Example
+
+```python
+import ctypes
+import platform
+from pathlib import Path
+
+# Load library
+system = platform.system()
+if system == "Linux":
+    lib_path = "rekrypt-ffi/lib/linux-x64/librekrypt_ffi.so"
+elif system == "Darwin":
+    lib_path = "rekrypt-ffi/lib/macos-arm64/librekrypt_ffi.dylib"
+elif system == "Windows":
+    lib_path = "rekrypt-ffi/lib/windows-x64/rekrypt_ffi.dll"
+
+lib = ctypes.CDLL(lib_path)
+
+# Define structures
+class ByteArray(ctypes.Structure):
+    _fields_ = [
+        ("data", ctypes.POINTER(ctypes.c_uint8)),
+        ("len", ctypes.c_size_t)
+    ]
+
+# Define functions
+lib.rekrypt_version.restype = ctypes.c_int
+lib.rekrypt_generate_keypair.argtypes = [
+    ctypes.POINTER(ByteArray),
+    ctypes.POINTER(ByteArray)
+]
+lib.rekrypt_generate_keypair.restype = ctypes.c_int
+lib.rekrypt_free_byte_array.argtypes = [ctypes.POINTER(ByteArray)]
+
+# Use library
+print(f"Rekrypt version: {lib.rekrypt_version()}")
+
+priv_key = ByteArray()
+pub_key = ByteArray()
+
+if lib.rekrypt_generate_keypair(ctypes.byref(priv_key), ctypes.byref(pub_key)) == 0:
+    try:
+        priv_bytes = bytes(priv_key.data[:priv_key.len])
+        pub_bytes = bytes(pub_key.data[:pub_key.len])
+        
+        print(f"Private key: {len(priv_bytes)} bytes")
+        print(f"Public key: {len(pub_bytes)} bytes")
+    finally:
+        lib.rekrypt_free_byte_array(ctypes.byref(priv_key))
+        lib.rekrypt_free_byte_array(ctypes.byref(pub_key))
+```
+
+### C Example
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+
+typedef struct {
+    uint8_t *data;
+    size_t len;
+} ByteArray;
+
+extern int rekrypt_version();
+extern int rekrypt_generate_keypair(ByteArray *out_private_key, ByteArray *out_public_key);
+extern void rekrypt_free_byte_array(ByteArray *arr);
+
+int main() {
+    printf("Rekrypt version: %d\n", rekrypt_version());
+    
+    ByteArray priv_key, pub_key;
+    
+    if (rekrypt_generate_keypair(&priv_key, &pub_key) == 0) {
+        printf("Private key: %zu bytes\n", priv_key.len);
+        printf("Public key: %zu bytes\n", pub_key.len);
+        
+        rekrypt_free_byte_array(&priv_key);
+        rekrypt_free_byte_array(&pub_key);
+    } else {
+        printf("Failed to generate keypair\n");
+        return 1;
+    }
+    
+    return 0;
+}
+```
+
+Compile: `gcc -o example example.c -L./rekrypt-ffi/lib/linux-x64 -lrekrypt_ffi`
 

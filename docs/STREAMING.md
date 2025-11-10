@@ -4,6 +4,17 @@
 
 For large files that don't fit in memory, use chunked streaming encryption.
 
+## Platform Support
+
+| Platform | Support | Implementation |
+|----------|---------|----------------|
+| Browser (WASM) | Yes | StreamEncryptor/StreamDecryptor classes |
+| Node.js (WASM) | Yes | Same API, use fs.createReadStream |
+| FFI Library | Partial | Manual chunk handling required |
+| Transform Service | N/A | Not applicable |
+
+**Note**: FFI library provides core encryption but requires application-level chunk management.
+
 ## StreamEncryptor
 
 ### Basic Usage
@@ -192,24 +203,277 @@ try {
 4. **Verification**: Verify all chunks before combining
 5. **Progress**: Show progress for user experience
 
-## Performance Tips
+## Node.js Streaming
+
+### Using Streams
 
 ```javascript
-// Use appropriate chunk size
-const chunkSize = Math.min(file.size / 100, 5 * 1024 * 1024); // Max 5MB
+import { createReadStream, createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
+import { Transform } from 'stream';
+import init, { StreamEncryptor } from 'rekrypt';
 
-// Process in parallel (if order doesn't matter)
-const promises = chunks.map(chunk => 
-    new Promise(resolve => {
-        const encrypted = encryptor.encryptChunk(chunk);
-        resolve(encrypted);
+await init();
+
+// Create encryption transform stream
+class EncryptStream extends Transform {
+    constructor(key, chunkSize) {
+        super();
+        this.encryptor = new StreamEncryptor(key, chunkSize);
+        this.buffer = Buffer.alloc(0);
+    }
+    
+    _transform(chunk, encoding, callback) {
+        this.buffer = Buffer.concat([this.buffer, chunk]);
+        
+        while (this.buffer.length >= this.chunkSize) {
+            const toEncrypt = this.buffer.slice(0, this.chunkSize);
+            this.buffer = this.buffer.slice(this.chunkSize);
+            
+            try {
+                const encrypted = this.encryptor.encryptChunk(toEncrypt);
+                this.push(JSON.stringify(encrypted) + '\n');
+            } catch (e) {
+                return callback(e);
+            }
+        }
+        callback();
+    }
+    
+    _flush(callback) {
+        if (this.buffer.length > 0) {
+            try {
+                const encrypted = this.encryptor.encryptChunk(this.buffer);
+                this.push(JSON.stringify(encrypted) + '\n');
+            } catch (e) {
+                return callback(e);
+            }
+        }
+        callback();
+    }
+}
+
+// Usage
+const key = sdk.generateRandomBytes(32);
+const encryptStream = new EncryptStream(key, 1024 * 1024);
+
+await pipeline(
+    createReadStream('large-file.bin'),
+    encryptStream,
+    createWriteStream('encrypted.chunks')
+);
+```
+
+## Platform-Specific Performance
+
+### Browser (WASM)
+
+**Characteristics**:
+- Memory limit: ~2GB (depends on browser)
+- Single-threaded (unless using Workers)
+- Good for files up to 1GB
+
+**Optimization**:
+```javascript
+// Use larger chunks for better performance
+const chunkSize = 2 * 1024 * 1024; // 2MB
+
+// For very large files, use Web Workers
+if (file.size > 100 * 1024 * 1024) {
+    const worker = new Worker('encrypt-worker.js');
+    worker.postMessage({ file, key });
+}
+```
+
+### Node.js (WASM)
+
+**Characteristics**:
+- Memory limit: Configurable (--max-old-space-size)
+- Can use streams efficiently
+- Good for files of any size
+
+**Optimization**:
+```javascript
+// Increase heap size for large files
+// node --max-old-space-size=4096 app.js
+
+// Use backpressure handling
+const stream = createReadStream('huge-file.bin', {
+    highWaterMark: 1024 * 1024 // 1MB buffer
+});
+```
+
+### Native (FFI)
+
+**Characteristics**:
+- Direct memory access
+- No GC overhead
+- Best performance for server-side processing
+
+**Implementation**:
+```go
+// Go example - manual chunk processing
+func EncryptFileStreaming(inputPath, outputPath string, key []byte) error {
+    input, err := os.Open(inputPath)
+    if err != nil {
+        return err
+    }
+    defer input.Close()
+    
+    output, err := os.Create(outputPath)
+    if err != nil {
+        return err
+    }
+    defer output.Close()
+    
+    chunkSize := 1024 * 1024 // 1MB
+    buffer := make([]byte, chunkSize)
+    chunkIndex := 0
+    
+    for {
+        n, err := input.Read(buffer)
+        if n > 0 {
+            // Encrypt chunk using FFI
+            encrypted, err := EncryptChunk(buffer[:n], key, chunkIndex)
+            if err != nil {
+                return err
+            }
+            
+            // Write to output
+            if _, err := output.Write(encrypted); err != nil {
+                return err
+            }
+            
+            chunkIndex++
+        }
+        
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return err
+        }
+    }
+    
+    return nil
+}
+```
+
+## Performance Comparison
+
+### Throughput by Platform
+
+| Platform | Chunk Size | Throughput | Notes |
+|----------|-----------|------------|-------|
+| Browser WASM | 1MB | ~50 MB/s | Single thread |
+| Node.js WASM | 1MB | ~80 MB/s | Better JIT |
+| FFI (Native) | 1MB | ~150 MB/s | No WASM overhead |
+| FFI (Native) | 4MB | ~200 MB/s | Larger chunks |
+
+**Note**: Performance varies by hardware and data type.
+
+### Memory Usage by Platform
+
+| Platform | Chunk Size | Peak Memory | Scalability |
+|----------|-----------|-------------|-------------|
+| Browser | 1MB | ~10MB | Files up to 1GB |
+| Node.js | 1MB | ~20MB | Files unlimited |
+| FFI Native | 1MB | ~5MB | Files unlimited |
+
+## Performance Tips
+
+### Chunk Size Selection
+
+```javascript
+// Small files (< 10MB): Use larger chunks
+const smallFileChunkSize = 5 * 1024 * 1024; // 5MB
+
+// Medium files (10-100MB): Balanced
+const mediumFileChunkSize = 1 * 1024 * 1024; // 1MB
+
+// Large files (> 100MB): Smaller chunks for better progress tracking
+const largeFileChunkSize = 512 * 1024; // 512KB
+
+// Auto-select based on file size
+function selectChunkSize(fileSize) {
+    if (fileSize < 10 * 1024 * 1024) return 5 * 1024 * 1024;
+    if (fileSize < 100 * 1024 * 1024) return 1 * 1024 * 1024;
+    return 512 * 1024;
+}
+```
+
+### Parallel Processing (WebAssembly)
+
+```javascript
+// Process multiple chunks in parallel (unordered)
+const chunkSize = 1024 * 1024;
+const chunks = [];
+
+// Read all chunks
+for (let i = 0; i < file.size; i += chunkSize) {
+    const chunk = file.slice(i, i + chunkSize);
+    chunks.push(chunk);
+}
+
+// Encrypt in parallel (each needs its own encryptor)
+const encrypted = await Promise.all(
+    chunks.map(async (chunk, index) => {
+        const data = new Uint8Array(await chunk.arrayBuffer());
+        const key = sdk.generateRandomBytes(32);
+        const encryptor = new StreamEncryptor(key, chunkSize);
+        return encryptor.encryptChunk(data);
     })
 );
-await Promise.all(promises);
+```
 
-// Use Web Workers for large files
-if (file.size > 50 * 1024 * 1024) { // > 50MB
-    useWebWorker(file);
-}
+### Web Workers
+
+```javascript
+// Main thread
+const worker = new Worker('encrypt-worker.js');
+
+worker.postMessage({
+    file: file,
+    chunkSize: 1024 * 1024
+});
+
+worker.onmessage = (e) => {
+    if (e.data.type === 'progress') {
+        updateProgress(e.data.percent);
+    } else if (e.data.type === 'complete') {
+        handleEncrypted(e.data.chunks);
+    }
+};
+
+// encrypt-worker.js
+self.onmessage = async (e) => {
+    const { file, chunkSize } = e.data;
+    
+    // Import WASM in worker
+    await import('./rekrypt.js');
+    const { StreamEncryptor } = await import('rekrypt');
+    
+    const key = new Uint8Array(32);
+    crypto.getRandomValues(key);
+    const encryptor = new StreamEncryptor(key, chunkSize);
+    
+    const chunks = [];
+    for (let offset = 0; offset < file.size; offset += chunkSize) {
+        const chunk = file.slice(offset, offset + chunkSize);
+        const data = new Uint8Array(await chunk.arrayBuffer());
+        const encrypted = encryptor.encryptChunk(data);
+        chunks.push(encrypted);
+        
+        self.postMessage({
+            type: 'progress',
+            percent: (offset / file.size * 100)
+        });
+    }
+    
+    self.postMessage({
+        type: 'complete',
+        chunks: chunks
+    });
+};
 ```
 

@@ -306,6 +306,65 @@ server {
    </script>
    ```
 
+## Platform Support
+
+Rekrypt supports multiple deployment targets:
+
+### WebAssembly (WASM)
+- Browser applications
+- Node.js applications
+- Deno, Bun runtimes
+- Build size: ~512KB (optimized)
+
+### Native FFI Library
+For server-side applications and native integrations:
+
+| Platform | Architecture | Library Type |
+|----------|--------------|--------------|
+| Linux | x86_64 | `.so`, `.a` |
+| Linux | ARM64 | `.so`, `.a` |
+| Windows | x86_64 | `.dll`, `.a` |
+| macOS | x86_64 | `.dylib`, `.a` |
+| macOS | ARM64 | `.dylib`, `.a` |
+
+**Language Support**: C, C++, Go, Python, Node.js (FFI), Rust
+
+See [rekrypt-ffi/README.md](../rekrypt-ffi/README.md) for FFI usage.
+
+## Building for Production
+
+### Build WASM Package
+
+```bash
+# Full optimized build
+make build-wasm
+
+# Output: pkg/rekrypt_bg.wasm (512KB)
+#         pkg/rekrypt.js
+#         pkg/rekrypt.d.ts
+```
+
+### Build FFI Library
+
+```bash
+# For current platform
+make build-ffi
+
+# Cross-compile for all platforms
+make install-targets    # Install tools once
+make cross-compile      # Build all platforms
+
+# Output: rekrypt-ffi/lib/{linux-x64,linux-arm64,windows-x64,macos-x64,macos-arm64}/
+```
+
+### Build Transform Service
+
+```bash
+make build-server
+
+# Output: transform-service/rekrypt-transform (Go binary)
+```
+
 ## Docker Deployment
 
 ### Dockerfile for Business Server
@@ -382,6 +441,52 @@ volumes:
 networks:
   internal:
     driver: bridge
+```
+
+### Dockerfile for Go Service (Using FFI)
+
+For services using the FFI library directly:
+
+```dockerfile
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev
+
+# Copy FFI library for target platform
+COPY rekrypt-ffi/lib/linux-x64/librekrypt_ffi.a /usr/local/lib/
+COPY rekrypt-ffi/lib/linux-x64/librekrypt_ffi.so /usr/local/lib/
+
+# Copy go source
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Build with CGO
+RUN CGO_ENABLED=1 go build -o app .
+
+# Runtime stage
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates libc6-compat
+
+WORKDIR /app
+
+# Copy binary and dynamic library
+COPY --from=builder /build/app .
+COPY --from=builder /usr/local/lib/librekrypt_ffi.so /usr/local/lib/
+
+# Set library path
+ENV LD_LIBRARY_PATH=/usr/local/lib
+
+USER nobody
+
+EXPOSE 8080
+
+CMD ["./app"]
 ```
 
 ## Performance Tuning

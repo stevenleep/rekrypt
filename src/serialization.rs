@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 /// Serializable representation of EncryptedValue
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SerializableEncryptedValue {
-    pub variant: u8,  // 0 = EncryptedOnceValue, 1 = TransformedValue
-    pub ephemeral_public_key_x: Vec<u8>,  // 32 bytes
-    pub ephemeral_public_key_y: Vec<u8>,  // 32 bytes
-    pub encrypted_message: Vec<u8>,       // 384 bytes
-    pub auth_hash: Vec<u8>,               // 128 bytes
-    pub public_signing_key: Vec<u8>,      // 32 bytes
-    pub signature: Vec<u8>,               // 64 bytes
+    pub variant: u8,                     // 0 = EncryptedOnceValue, 1 = TransformedValue
+    pub ephemeral_public_key_x: Vec<u8>, // 32 bytes
+    pub ephemeral_public_key_y: Vec<u8>, // 32 bytes
+    pub encrypted_message: Vec<u8>,      // 384 bytes
+    pub auth_hash: Vec<u8>,              // 128 bytes
+    pub public_signing_key: Vec<u8>,     // 32 bytes
+    pub signature: Vec<u8>,              // 64 bytes
     pub transform_blocks: Option<Vec<u8>>,
 }
 
@@ -103,14 +103,14 @@ use recrypt::api::{EncryptedTempKey, HashedValue, TransformKey};
 /// Serializable representation of TransformKey
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SerializableTransformKey {
-    pub ephemeral_public_key_x: Vec<u8>,  // 32 bytes
-    pub ephemeral_public_key_y: Vec<u8>,  // 32 bytes
-    pub to_public_key_x: Vec<u8>,         // 32 bytes
-    pub to_public_key_y: Vec<u8>,         // 32 bytes
-    pub encrypted_temp_key: Vec<u8>,      // 384 bytes
-    pub hashed_temp_key: Vec<u8>,         // 128 bytes
-    pub public_signing_key: Vec<u8>,      // 32 bytes
-    pub signature: Vec<u8>,               // 64 bytes
+    pub ephemeral_public_key_x: Vec<u8>, // 32 bytes
+    pub ephemeral_public_key_y: Vec<u8>, // 32 bytes
+    pub to_public_key_x: Vec<u8>,        // 32 bytes
+    pub to_public_key_y: Vec<u8>,        // 32 bytes
+    pub encrypted_temp_key: Vec<u8>,     // 384 bytes
+    pub hashed_temp_key: Vec<u8>,        // 128 bytes
+    pub public_signing_key: Vec<u8>,     // 32 bytes
+    pub signature: Vec<u8>,              // 64 bytes
 }
 
 impl SerializableTransformKey {
@@ -118,7 +118,7 @@ impl SerializableTransformKey {
     pub fn from_transform_key(tk: &TransformKey) -> Result<Self, CryptoError> {
         let (ephem_x, ephem_y) = tk.ephemeral_public_key().bytes_x_y();
         let (to_x, to_y) = tk.to_public_key().bytes_x_y();
-        
+
         Ok(Self {
             ephemeral_public_key_x: ephem_x.to_vec(),
             ephemeral_public_key_y: ephem_y.to_vec(),

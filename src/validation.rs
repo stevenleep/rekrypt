@@ -8,14 +8,14 @@ use crate::i18n::I18n;
 pub fn validate_password_strength(password: &str, i18n: &I18n) -> Result<(), CryptoError> {
     const MIN_PASSWORD_LENGTH: usize = 12;
     const MAX_PASSWORD_LENGTH: usize = 128;
-    
+
     if password.len() < MIN_PASSWORD_LENGTH {
         return Err(CryptoError::new(
             ErrorCode::WeakPassword,
             i18n.error_msg("password_too_short"),
         ));
     }
-    
+
     if password.len() > MAX_PASSWORD_LENGTH {
         return Err(CryptoError::new(
             ErrorCode::WeakPassword,
@@ -27,32 +27,35 @@ pub fn validate_password_strength(password: &str, i18n: &I18n) -> Result<(), Cry
     let has_uppercase = password.chars().any(|c| c.is_uppercase());
     let has_digit = password.chars().any(|c| c.is_ascii_digit());
     let has_special = password.chars().any(|c| !c.is_alphanumeric());
-    
+
     let complexity = [has_lowercase, has_uppercase, has_digit, has_special]
         .iter()
         .filter(|&&x| x)
         .count();
-    
+
     if complexity < 3 {
         return Err(CryptoError::new(
             ErrorCode::WeakPassword,
             i18n.error_msg("password_complexity"),
         ));
     }
-    
+
     Ok(())
 }
 
 /// Checks and normalizes mnemonic (lowercase, trim)
 pub fn check_and_normalize(mnemonic: &str, i18n: &I18n) -> Result<String, CryptoError> {
     let normalized = mnemonic.trim().to_lowercase();
-    if !normalized.chars().all(|c| c.is_alphabetic() || c.is_whitespace()) {
+    if !normalized
+        .chars()
+        .all(|c| c.is_alphabetic() || c.is_whitespace())
+    {
         return Err(CryptoError::new(
             ErrorCode::InvalidMnemonic,
             i18n.error_msg("invalid_mnemonic"),
         ));
     }
-    
+
     Ok(normalized)
 }
 
@@ -71,14 +74,14 @@ pub fn validate_public_key(public_key: &[u8], i18n: &I18n) -> Result<(), CryptoE
             i18n.error_msg("invalid_public_key"),
         ));
     }
-    
+
     if public_key.iter().all(|&b| b == 0xFF) {
         return Err(CryptoError::new(
             ErrorCode::InvalidPublicKey,
             i18n.error_msg("invalid_public_key"),
         ));
     }
-    
+
     Ok(())
 }
 
@@ -130,8 +133,8 @@ pub fn validate_iv(iv: &[u8], i18n: &I18n) -> Result<(), CryptoError> {
 pub fn validate_kdf_iterations(iterations: u32, i18n: &I18n) -> Result<(), CryptoError> {
     const MIN_ITERATIONS: u32 = 100_000;
     const MAX_ITERATIONS: u32 = 10_000_000;
-    
-    if iterations < MIN_ITERATIONS || iterations > MAX_ITERATIONS {
+
+    if !(MIN_ITERATIONS..=MAX_ITERATIONS).contains(&iterations) {
         return Err(CryptoError::new(
             ErrorCode::InvalidKdfParams,
             i18n.format(
@@ -154,14 +157,14 @@ pub fn validate_timestamp(
 ) -> Result<(), CryptoError> {
     let current_time_ms = js_sys::Date::now() as u64;
     const CLOCK_SKEW_MS: u64 = 5 * 60 * 1000;
-    
+
     if client_timestamp > current_time_ms + CLOCK_SKEW_MS {
         return Err(CryptoError::new(
             ErrorCode::InvalidInput,
             i18n.error_msg("timestamp_future"),
         ));
     }
-    
+
     let max_age_ms = max_age_seconds * 1000;
     if current_time_ms > client_timestamp + max_age_ms {
         return Err(CryptoError::new(
@@ -169,7 +172,7 @@ pub fn validate_timestamp(
             i18n.error_msg("timestamp_too_old"),
         ));
     }
-    
+
     Ok(())
 }
 
@@ -181,7 +184,7 @@ pub fn validate_request_id(request_id: &str, i18n: &I18n) -> Result<(), CryptoEr
             i18n.error_msg("invalid_request_id"),
         ));
     }
-    
+
     if request_id.chars().nth(8) != Some('-')
         || request_id.chars().nth(13) != Some('-')
         || request_id.chars().nth(18) != Some('-')
@@ -192,7 +195,7 @@ pub fn validate_request_id(request_id: &str, i18n: &I18n) -> Result<(), CryptoEr
             i18n.error_msg("invalid_request_id"),
         ));
     }
-    
+
     for (i, c) in request_id.chars().enumerate() {
         if i == 8 || i == 13 || i == 18 || i == 23 {
             continue;
@@ -204,7 +207,6 @@ pub fn validate_request_id(request_id: &str, i18n: &I18n) -> Result<(), CryptoEr
             ));
         }
     }
-    
+
     Ok(())
 }
-

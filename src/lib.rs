@@ -16,22 +16,27 @@ use bip39::{Language, Mnemonic};
 use i18n::{I18n, Language as I18nLanguage};
 use rand::Rng;
 use recrypt::api::{
-    CryptoOps, DefaultRng, Ed25519, Ed25519Ops, KeyGenOps, PrivateKey, PublicKey,
-    RandomBytes, Recrypt, Sha256, SigningKeypair,
+    CryptoOps, DefaultRng, Ed25519, Ed25519Ops, KeyGenOps, PrivateKey, PublicKey, RandomBytes,
+    Recrypt, Sha256, SigningKeypair,
 };
-use serde_wasm_bindgen;
 use std::cell::Cell;
 use wasm_bindgen::prelude::*;
 
 pub use errors::CryptoError;
 pub use streaming::{EncryptedChunk, StreamDecryptor, StreamEncryptor, StreamMetadata};
-pub use types::{Capsule, CryptoFunctionResult, ExportWarning, Keystore, KeypairResult};
+pub use types::{Capsule, CryptoFunctionResult, ExportWarning, KeypairResult, Keystore};
 
 #[wasm_bindgen]
 pub struct EncryptSDK {
     recrypt: Recrypt<Sha256, Ed25519, RandomBytes<DefaultRng>>,
     sequence_counter: Cell<u64>,
     i18n: I18n,
+}
+
+impl Default for EncryptSDK {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]
@@ -42,7 +47,7 @@ impl EncryptSDK {
 
         let mut rng = rand::thread_rng();
         let initial_sequence: u64 = rng.gen();
-        
+
         Self {
             recrypt: Recrypt::new(),
             sequence_counter: Cell::new(initial_sequence),
@@ -57,7 +62,7 @@ impl EncryptSDK {
             _ => I18nLanguage::EnUS,
         });
     }
-    
+
     /// Gets SDK version information
     #[wasm_bindgen(js_name = getVersion)]
     pub fn get_version(&self) -> String {
@@ -92,7 +97,11 @@ impl EncryptSDK {
     }
 
     #[wasm_bindgen(js_name = verifyKeypairMatch)]
-    pub fn verify_keypair_match(&self, private_key: &[u8], public_key: &[u8]) -> Result<bool, CryptoError> {
+    pub fn verify_keypair_match(
+        &self,
+        private_key: &[u8],
+        public_key: &[u8],
+    ) -> Result<bool, CryptoError> {
         helpers::verify_keypair_match(private_key, public_key, &self.recrypt)
     }
 
@@ -125,9 +134,9 @@ impl EncryptSDK {
     pub fn hex_to_bytes(&self, hex: &str) -> Result<Vec<u8>, CryptoError> {
         helpers::hex_to_bytes(hex)
     }
-    
+
     // Private helpers
-    
+
     fn next_iv(&self) -> [u8; 12] {
         crypto::generate_iv()
     }
@@ -144,7 +153,7 @@ impl EncryptSDK {
 
         let key_tuple: ([u8; 32], [u8; 32]) = postcard::from_bytes(public_key)?;
         let pk = PublicKey::new(key_tuple)?;
-        
+
         let tuple = pk.bytes_x_y();
         if *tuple.0 == [0u8; 32] && *tuple.1 == [0u8; 32] {
             return Err(CryptoError::InvalidPublicKey);
@@ -153,22 +162,34 @@ impl EncryptSDK {
         Ok(pk)
     }
 
-    fn build_encrypted_result(&self, capsule: Capsule, c_data: Vec<u8>) -> Result<JsValue, CryptoError> {
+    fn build_encrypted_result(
+        &self,
+        capsule: Capsule,
+        c_data: Vec<u8>,
+    ) -> Result<JsValue, CryptoError> {
         let c_hash = crypto::compute_hash(&postcard::to_allocvec(&capsule)?);
         let obj = js_sys::Object::new();
 
         let capsule_value = serde_wasm_bindgen::to_value(&capsule)?;
-        js_sys::Reflect::set(&obj, &JsValue::from_str("capsule"), &capsule_value)
-            .map_err(|_| CryptoError::new(crate::errors::ErrorCode::SerdeError, "Failed to set capsule"))?;
+        js_sys::Reflect::set(&obj, &JsValue::from_str("capsule"), &capsule_value).map_err(
+            |_| {
+                CryptoError::new(
+                    crate::errors::ErrorCode::SerdeError,
+                    "Failed to set capsule",
+                )
+            },
+        )?;
 
         let c_data_array = js_sys::Uint8Array::from(&c_data[..]);
-        js_sys::Reflect::set(&obj, &JsValue::from_str("c_data"), &c_data_array)
-            .map_err(|_| CryptoError::new(crate::errors::ErrorCode::SerdeError, "Failed to set c_data"))?;
+        js_sys::Reflect::set(&obj, &JsValue::from_str("c_data"), &c_data_array).map_err(|_| {
+            CryptoError::new(crate::errors::ErrorCode::SerdeError, "Failed to set c_data")
+        })?;
 
         let c_hash_array = js_sys::Uint8Array::from(&c_hash[..]);
-        js_sys::Reflect::set(&obj, &JsValue::from_str("c_hash"), &c_hash_array)
-            .map_err(|_| CryptoError::new(crate::errors::ErrorCode::SerdeError, "Failed to set c_hash"))?;
-        
+        js_sys::Reflect::set(&obj, &JsValue::from_str("c_hash"), &c_hash_array).map_err(|_| {
+            CryptoError::new(crate::errors::ErrorCode::SerdeError, "Failed to set c_hash")
+        })?;
+
         Ok(obj.into())
     }
 
@@ -182,7 +203,6 @@ impl EncryptSDK {
         serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
     }
 
-
     /// Encrypts data using hybrid encryption (proxy re-encryption + AES-256-GCM)
     #[wasm_bindgen(js_name = encrypt)]
     pub fn encrypt(&self, data: &[u8], public_key: &[u8]) -> Result<JsValue, CryptoError> {
@@ -191,16 +211,19 @@ impl EncryptSDK {
 
         let signing_key_pair = self.recrypt.generate_ed25519_key_pair();
         let plaintext = self.recrypt.gen_plaintext();
-        let encrypted_val = self.recrypt.encrypt(&plaintext, &public_key, &signing_key_pair)?;
+        let encrypted_val = self
+            .recrypt
+            .encrypt(&plaintext, &public_key, &signing_key_pair)?;
         let symmetric_key = self.recrypt.derive_symmetric_key(&plaintext);
 
         let nonce = self.next_iv();
         let c_data = crypto::aes_encrypt(symmetric_key.bytes(), &nonce, data, &self.i18n)?;
         let data_hash = crypto::compute_hash(&c_data);
 
-        let serializable_encrypted = serialization::SerializableEncryptedValue::from_encrypted_value(&encrypted_val)?;
+        let serializable_encrypted =
+            serialization::SerializableEncryptedValue::from_encrypted_value(&encrypted_val)?;
         let encrypted_data = postcard::to_allocvec(&serializable_encrypted)?;
-        
+
         let capsule = Capsule {
             version: 1,
             nonce: nonce.to_vec(),
@@ -231,24 +254,28 @@ impl EncryptSDK {
         validation::validate_version(capsule.version, 1, &self.i18n)?;
         validation::validate_timestamp(capsule.client_timestamp, 86400, &self.i18n)?;
         validation::validate_request_id(&capsule.request_id, &self.i18n)?;
-        
+
         let computed_hash = crypto::compute_hash(ciphertext);
         crypto::verify_mac(&computed_hash, &capsule.data_hash, &self.i18n)?;
 
         let private_key = PrivateKey::new_from_slice(private_key)?;
-        let serializable_encrypted: serialization::SerializableEncryptedValue = 
+        let serializable_encrypted: serialization::SerializableEncryptedValue =
             postcard::from_bytes(&capsule.encrypted_data)?;
         let encrypted_values = serializable_encrypted.to_encrypted_value()?;
 
         let pt = self.recrypt.decrypt(encrypted_values, &private_key)?;
         let key = self.recrypt.derive_symmetric_key(&pt);
-        
+
         crypto::aes_decrypt(key.bytes(), &capsule.nonce, ciphertext, &self.i18n)
     }
 
     /// Recover keypair from BIP39 mnemonic phrase with optional passphrase
     #[wasm_bindgen(js_name = recoverKeypair)]
-    pub fn recover_keypair(&self, mnemonic: String, passphrase: Option<String>) -> Result<JsValue, CryptoError> {
+    pub fn recover_keypair(
+        &self,
+        mnemonic: String,
+        passphrase: Option<String>,
+    ) -> Result<JsValue, CryptoError> {
         let pass = passphrase.as_deref().unwrap_or("");
         let keypair = keys::recover_keypair(&mnemonic, pass, &self.i18n)?;
         serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
@@ -267,7 +294,7 @@ impl EncryptSDK {
     }
 
     // Proxy re-encryption
-    
+
     /// Generates transform key for delegated access (placeholder - requires server)
     #[wasm_bindgen(js_name = generateTransformKey)]
     pub fn generate_transform_key(
@@ -280,9 +307,13 @@ impl EncryptSDK {
         let recipient_public_key = self.validate_and_parse_public_key(delegatee_public_key)?;
         let signing_key_pair = SigningKeypair::from_byte_slice(signing_key_pair)
             .map_err(|_| CryptoError::InvalidPrivateKey)?;
-        
-        let _cfrag = self.recrypt.generate_transform_key(&private_key, &recipient_public_key, &signing_key_pair)?;
-        
+
+        let _cfrag = self.recrypt.generate_transform_key(
+            &private_key,
+            &recipient_public_key,
+            &signing_key_pair,
+        )?;
+
         let placeholder = serialization::SerializableTransformKey::placeholder();
         postcard::to_allocvec(&placeholder).map_err(Into::into)
     }
@@ -298,10 +329,10 @@ impl EncryptSDK {
     ) -> Result<Vec<u8>, CryptoError> {
         let _capsule = serde_wasm_bindgen::from_value::<Capsule>(capsule)
             .map_err(|_| CryptoError::InvalidCapsule)?;
-        
+
         Err(CryptoError::new(
             crate::errors::ErrorCode::NotImplemented,
-            "Requires server-side proxy. See service/transform/"
+            "Requires server-side proxy. See service/transform/",
         ))
     }
 
@@ -342,13 +373,13 @@ impl EncryptSDK {
     ) -> Result<JsValue, CryptoError> {
         let private_key = self.unlock_keystore(keystore, password)?;
         let public_key = self.derive_public_key(&private_key)?;
-        
+
         let keypair = KeypairResult {
             private_key,
             public_key,
             mnemonic: String::from(""),
         };
-        
+
         serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
     }
 
@@ -357,13 +388,13 @@ impl EncryptSDK {
     pub fn reconstruct_keypair(&self, private_key: &[u8]) -> Result<JsValue, CryptoError> {
         validation::validate_private_key(private_key, &self.i18n)?;
         let public_key = self.derive_public_key(private_key)?;
-        
+
         let keypair = KeypairResult {
             private_key: private_key.to_vec(),
             public_key,
             mnemonic: String::from(""),
         };
-        
+
         serde_wasm_bindgen::to_value(&keypair).map_err(CryptoError::SerdeWasmError)
     }
 
@@ -403,4 +434,3 @@ impl EncryptSDK {
         helpers::deserialize_capsule(bytes)
     }
 }
-

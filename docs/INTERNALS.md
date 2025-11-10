@@ -1,5 +1,114 @@
 # Internal Implementation Details
 
+## Multi-Platform Implementation
+
+Rekrypt is implemented in Rust and compiled to multiple targets:
+
+### Build Targets
+
+1. **WebAssembly (cdylib)**
+   - Compiled with `wasm-pack`
+   - Output: `rekrypt_bg.wasm` (512KB)
+   - Target: `wasm32-unknown-unknown`
+   - Optimization: Size (`opt-level = "z"`)
+
+2. **FFI Library (cdylib + staticlib)**
+   - Compiled with `cargo` or `cargo-zigbuild`
+   - Output: `.so`, `.dylib`, `.dll`, `.a`
+   - Targets: Linux, Windows, macOS (x64 + ARM64)
+   - Optimization: Speed (`opt-level = 3`)
+
+3. **Rust Library (rlib)**
+   - For direct Rust integration
+   - Zero-cost abstraction
+
+### FFI Layer Implementation
+
+The FFI layer (`rekrypt-ffi`) provides C ABI bindings:
+
+**Key Components**:
+
+1. **ByteArray Structure**
+   ```rust
+   #[repr(C)]
+   pub struct ByteArray {
+       pub data: *mut u8,
+       pub len: usize,
+   }
+   ```
+   - C-compatible memory layout
+   - Caller must free using `rekrypt_free_byte_array()`
+
+2. **Error Handling**
+   ```rust
+   static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
+   
+   fn set_error(msg: String) {
+       *LAST_ERROR.lock().unwrap() = Some(msg);
+   }
+   ```
+   - Thread-safe error storage
+   - Accessible via `rekrypt_get_last_error()`
+
+3. **Memory Management**
+   ```rust
+   impl ByteArray {
+       fn from_vec(vec: Vec<u8>) -> Self {
+           let mut vec = vec;
+           let ptr = vec.as_mut_ptr();
+           let len = vec.len();
+           std::mem::forget(vec);  // Don't drop
+           ByteArray { data: ptr, len }
+       }
+   }
+   
+   #[no_mangle]
+   pub extern "C" fn rekrypt_free_byte_array(arr: *mut ByteArray) {
+       if !arr.is_null() {
+           unsafe {
+               let arr = &*arr;
+               if !arr.data.is_null() && arr.len > 0 {
+                   Vec::from_raw_parts(arr.data, arr.len, arr.len);
+                   // Vec is dropped here, freeing memory
+               }
+           }
+       }
+   }
+   ```
+
+4. **Function Exports**
+   ```rust
+   #[no_mangle]
+   pub extern "C" fn rekrypt_generate_keypair(
+       out_private_key: *mut ByteArray,
+       out_public_key: *mut ByteArray,
+   ) -> i32 {
+       // Implementation...
+   }
+   ```
+   - `#[no_mangle]`: Preserve function names
+   - `extern "C"`: Use C calling convention
+   - Returns `0` on success, non-zero on error
+
+### Platform-Specific Compilation
+
+**Cargo Configuration**:
+```toml
+[lib]
+crate-type = ["cdylib", "staticlib"]  # Both dynamic and static
+
+[profile.release]
+opt-level = 3        # Speed over size for FFI
+lto = true           # Link-time optimization
+codegen-units = 1    # Better optimization
+strip = true         # Remove debug symbols
+```
+
+**Cross-Compilation with cargo-zigbuild**:
+- Uses Zig as universal linker
+- No need for platform-specific toolchains
+- Supports Linux, Windows, macOS from any host
+
 ## BIP39 Mnemonic Deep Dive
 
 ### Generation Process

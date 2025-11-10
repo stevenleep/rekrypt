@@ -59,7 +59,7 @@ impl StreamEncryptor {
         if key.len() != 32 {
             return Err(CryptoError::new(
                 ErrorCode::InvalidInput,
-                "Key must be 32 bytes for AES-256"
+                "Key must be 32 bytes for AES-256",
             ));
         }
 
@@ -67,7 +67,7 @@ impl StreamEncryptor {
         if chunk_size == 0 || chunk_size > 10 * 1024 * 1024 {
             return Err(CryptoError::new(
                 ErrorCode::InvalidInput,
-                "Chunk size must be between 1 byte and 10MB"
+                "Chunk size must be between 1 byte and 10MB",
             ));
         }
 
@@ -87,7 +87,7 @@ impl StreamEncryptor {
         if chunk_data.len() > self.chunk_size {
             return Err(CryptoError::new(
                 ErrorCode::InvalidInput,
-                &format!("Chunk exceeds max {}", self.chunk_size)
+                format!("Chunk exceeds max {}", self.chunk_size),
             ));
         }
 
@@ -104,8 +104,7 @@ impl StreamEncryptor {
 
         self.chunk_index += 1;
 
-        serde_wasm_bindgen::to_value(&encrypted_chunk)
-            .map_err(CryptoError::SerdeWasmError)
+        serde_wasm_bindgen::to_value(&encrypted_chunk).map_err(CryptoError::SerdeWasmError)
     }
 
     #[wasm_bindgen(js_name = reset)]
@@ -127,7 +126,7 @@ impl StreamDecryptor {
         if key.len() != 32 {
             return Err(CryptoError::new(
                 ErrorCode::InvalidInput,
-                "Key must be 32 bytes for AES-256"
+                "Key must be 32 bytes for AES-256",
             ));
         }
 
@@ -149,7 +148,10 @@ impl StreamDecryptor {
         if chunk.chunk_index != self.chunk_index {
             return Err(CryptoError::new(
                 ErrorCode::InvalidInput,
-                &format!("Index mismatch: expected {}, got {}", self.chunk_index, chunk.chunk_index)
+                format!(
+                    "Index mismatch: expected {}, got {}",
+                    self.chunk_index, chunk.chunk_index
+                ),
             ));
         }
 
@@ -157,12 +159,8 @@ impl StreamDecryptor {
         crypto::verify_mac(&computed_hash, &chunk.chunk_hash, &self.i18n)?;
         validation::validate_iv(&chunk.nonce, &self.i18n)?;
 
-        let plaintext = crypto::aes_decrypt(
-            &self.key,
-            &chunk.nonce,
-            &chunk.ciphertext,
-            &self.i18n
-        )?;
+        let plaintext =
+            crypto::aes_decrypt(&self.key, &chunk.nonce, &chunk.ciphertext, &self.i18n)?;
 
         self.chunk_index += 1;
 
@@ -179,4 +177,3 @@ impl StreamDecryptor {
         self.chunk_index
     }
 }
-

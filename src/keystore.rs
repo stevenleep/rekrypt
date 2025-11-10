@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2025 stenvenleep
 
-use crate::crypto::{aes_decrypt, aes_encrypt, compute_hmac, derive_key_pbkdf2, generate_iv, generate_salt, verify_mac};
+use crate::crypto::{
+    aes_decrypt, aes_encrypt, compute_hmac, derive_key_pbkdf2, generate_iv, generate_salt,
+    verify_mac,
+};
 use crate::errors::{CryptoError, ErrorCode};
 use crate::i18n::I18n;
-use crate::types::{CipherParams, Keystore, KeystoreCrypto, KdfParams};
-use crate::validation::{validate_kdf_iterations, validate_password_strength, validate_private_key, validate_iv};
+use crate::types::{CipherParams, KdfParams, Keystore, KeystoreCrypto};
+use crate::validation::{
+    validate_iv, validate_kdf_iterations, validate_password_strength, validate_private_key,
+};
 use zeroize::Zeroize;
 
 /// Creates encrypted keystore
@@ -31,20 +36,23 @@ pub fn create_keystore(
     let dklen_bytes = (dklen as u32).to_le_bytes();
     let cipher_name = b"aes-256-gcm";
     let kdf_name = b"pbkdf2-hmac-sha256";
-    
-    let mut mac_data = compute_hmac(&key, &[
-        &ciphertext,
-        &salt,
-        &iv,
-        &iterations_bytes,
-        &dklen_bytes,
-        &version_bytes,
-        cipher_name,
-        kdf_name,
-    ]);
+
+    let mut mac_data = compute_hmac(
+        &key,
+        &[
+            &ciphertext,
+            &salt,
+            &iv,
+            &iterations_bytes,
+            &dklen_bytes,
+            &version_bytes,
+            cipher_name,
+            kdf_name,
+        ],
+    );
 
     key.zeroize();
-    
+
     let keystore = Keystore {
         version: 1,
         crypto: KeystoreCrypto {
@@ -64,7 +72,7 @@ pub fn create_keystore(
     };
 
     mac_data.zeroize();
-    
+
     Ok(keystore)
 }
 
@@ -77,7 +85,10 @@ pub fn recover_from_keystore(
     if keystore.version != 1 {
         return Err(CryptoError::new(
             ErrorCode::UnsupportedVersion,
-            i18n.format("unsupported_version", &[("version", &keystore.version.to_string())]),
+            i18n.format(
+                "unsupported_version",
+                &[("version", &keystore.version.to_string())],
+            ),
         ));
     }
 
@@ -96,23 +107,26 @@ pub fn recover_from_keystore(
     let dklen_bytes = keystore.crypto.kdfparams.dklen.to_le_bytes();
     let cipher_name = keystore.crypto.cipher.as_bytes();
     let kdf_name = keystore.crypto.kdf.as_bytes();
-    
-    let computed_mac = compute_hmac(&key, &[
-        &keystore.crypto.ciphertext,
-        &keystore.crypto.kdfparams.salt,
-        &keystore.crypto.cipherparams.iv,
-        &iterations_bytes,
-        &dklen_bytes,
-        &version_bytes,
-        cipher_name,
-        kdf_name,
-    ]);
+
+    let computed_mac = compute_hmac(
+        &key,
+        &[
+            &keystore.crypto.ciphertext,
+            &keystore.crypto.kdfparams.salt,
+            &keystore.crypto.cipherparams.iv,
+            &iterations_bytes,
+            &dklen_bytes,
+            &version_bytes,
+            cipher_name,
+            kdf_name,
+        ],
+    );
 
     if let Err(e) = verify_mac(&computed_mac, &keystore.crypto.mac, i18n) {
         key.zeroize();
         return Err(e);
     }
-    
+
     let private_key = aes_decrypt(
         &key,
         &keystore.crypto.cipherparams.iv,
@@ -121,9 +135,6 @@ pub fn recover_from_keystore(
     );
 
     key.zeroize();
-    
-    match private_key {
-        Ok(pk) => Ok(pk),
-        Err(e) => Err(e),
-    }
+
+    private_key
 }

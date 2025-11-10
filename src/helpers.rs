@@ -10,31 +10,31 @@ use crate::types::Capsule;
 use crate::validation;
 use rand::Rng;
 use recrypt::api::{KeyGenOps, PrivateKey, PublicKey, SigningKeypair};
-use serde_wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
 /// Serializes capsule to bytes
 pub fn serialize_capsule(capsule: JsValue) -> Result<Vec<u8>, CryptoError> {
-    let capsule: Capsule = serde_wasm_bindgen::from_value(capsule)
-        .map_err(|_| CryptoError::InvalidCapsule)?;
-    
-    postcard::to_allocvec(&capsule)
-        .map_err(|e| CryptoError::new(
+    let capsule: Capsule =
+        serde_wasm_bindgen::from_value(capsule).map_err(|_| CryptoError::InvalidCapsule)?;
+
+    postcard::to_allocvec(&capsule).map_err(|e| {
+        CryptoError::new(
             crate::errors::ErrorCode::SerdeError,
-            &format!("Failed to serialize capsule: {:?}", e)
-        ))
+            format!("Failed to serialize capsule: {:?}", e),
+        )
+    })
 }
 
 /// Deserializes bytes to capsule
 pub fn deserialize_capsule(bytes: &[u8]) -> Result<JsValue, CryptoError> {
-    let capsule: Capsule = postcard::from_bytes(bytes)
-        .map_err(|e| CryptoError::new(
+    let capsule: Capsule = postcard::from_bytes(bytes).map_err(|e| {
+        CryptoError::new(
             crate::errors::ErrorCode::SerdeError,
-            &format!("Failed to deserialize capsule: {:?}", e)
-        ))?;
-    
-    serde_wasm_bindgen::to_value(&capsule)
-        .map_err(CryptoError::SerdeWasmError)
+            format!("Failed to deserialize capsule: {:?}", e),
+        )
+    })?;
+
+    serde_wasm_bindgen::to_value(&capsule).map_err(CryptoError::SerdeWasmError)
 }
 
 /// Reconstructs signing keypair from bytes
@@ -94,7 +94,10 @@ pub fn verify_keypair_match<R: KeyGenOps>(
 }
 
 /// Derives public key from private key
-pub fn derive_public_key<R: KeyGenOps>(private_key: &[u8], recrypt: &R) -> Result<Vec<u8>, CryptoError> {
+pub fn derive_public_key<R: KeyGenOps>(
+    private_key: &[u8],
+    recrypt: &R,
+) -> Result<Vec<u8>, CryptoError> {
     let priv_key = PrivateKey::new_from_slice(private_key)?;
     let pub_key = recrypt.compute_public_key(&priv_key)?;
     postcard::to_allocvec(&pub_key.bytes_x_y()).map_err(Into::into)
@@ -124,12 +127,18 @@ pub fn bytes_to_hex(bytes: &[u8]) -> String {
 /// Hex to bytes
 pub fn hex_to_bytes(hex: &str) -> Result<Vec<u8>, CryptoError> {
     let hex = hex.trim_start_matches("0x").trim_start_matches("0X");
-    if hex.len() % 2 != 0 {
-        return Err(CryptoError::new(crate::errors::ErrorCode::InvalidInput, "Hex must have even length"));
+    if !hex.len().is_multiple_of(2) {
+        return Err(CryptoError::new(
+            crate::errors::ErrorCode::InvalidInput,
+            "Hex must have even length",
+        ));
     }
-    (0..hex.len()).step_by(2).map(|i| {
-        u8::from_str_radix(&hex[i..i + 2], 16)
-            .map_err(|_| CryptoError::new(crate::errors::ErrorCode::InvalidInput, "Invalid hex"))
-    }).collect()
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| {
+            u8::from_str_radix(&hex[i..i + 2], 16).map_err(|_| {
+                CryptoError::new(crate::errors::ErrorCode::InvalidInput, "Invalid hex")
+            })
+        })
+        .collect()
 }
-

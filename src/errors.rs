@@ -3,8 +3,8 @@
 
 //! Error types and codes
 
-use thiserror::Error;
 use recrypt::api::RecryptErr;
+use thiserror::Error;
 use wasm_bindgen::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,38 +37,35 @@ pub enum ErrorCode {
 #[derive(Error, Debug)]
 pub enum CryptoError {
     #[error("Error {code:?}: {message}")]
-    WithCode {
-        code: ErrorCode,
-        message: String,
-    },
-    
+    WithCode { code: ErrorCode, message: String },
+
     #[error("Recrypt error")]
     RecryptError(#[from] RecryptErr),
-    
+
     #[error("BIP39 error")]
     BIP39Error(#[from] bip39::Error),
-    
+
     #[error("Postcard error")]
     PostcardError(#[from] postcard::Error),
-    
+
     #[error("Serde WASM error")]
     SerdeWasmError(#[from] serde_wasm_bindgen::Error),
-    
+
     #[error("Serde JSON error")]
     SerdeError(#[from] serde_json::Error),
-    
+
     #[error("Invalid private key")]
     InvalidPrivateKey,
-    
+
     #[error("Invalid public key")]
     InvalidPublicKey,
-    
+
     #[error("Invalid capsule")]
     InvalidCapsule,
-    
+
     #[error("Invalid data format")]
     InvalidData,
-    
+
     #[error("Ed25519 error")]
     Ed25519Error,
 }
@@ -80,7 +77,7 @@ impl CryptoError {
             message: message.into(),
         }
     }
-    
+
     pub fn code(&self) -> Option<ErrorCode> {
         match self {
             Self::WithCode { code, .. } => Some(*code),
@@ -114,4 +111,3 @@ impl From<CryptoError> for JsValue {
         }
     }
 }
-

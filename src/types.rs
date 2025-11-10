@@ -8,8 +8,8 @@ use zeroize::Zeroize;
 #[derive(Serialize, Deserialize, Clone, Zeroize)]
 #[zeroize(drop)]
 pub struct KeypairResult {
-    pub private_key: Vec<u8>,  // 32 bytes
-    pub public_key: Vec<u8>,   // 64 bytes
+    pub private_key: Vec<u8>, // 32 bytes
+    pub public_key: Vec<u8>,  // 64 bytes
     pub mnemonic: String,
 }
 
@@ -94,4 +94,3 @@ pub struct ExportWarning {
     pub private_key: Vec<u8>,
     pub safety_tips: Vec<String>,
 }
-

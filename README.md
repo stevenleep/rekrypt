@@ -35,6 +35,14 @@ make build-wasm     # WebAssembly package
 make build-ffi      # FFI library (for Go/Python/C++)
 make build-server   # Go transform server
 
+# Cross-compile FFI for multiple platforms
+make install-targets    # Install cross-compilation tools
+make cross-compile      # Build for all platforms
+make cross-linux-x64    # Linux x86_64
+make cross-windows-x64  # Windows x64
+make cross-macos-arm64  # macOS Apple Silicon
+make cross-help         # Show cross-compilation help
+
 # Run tests
 make test           # All tests
 make test-ffi       # FFI tests only
@@ -66,10 +74,54 @@ const decrypted = sdk.decrypt(encrypted.capsule, alice.private_key, encrypted.c_
 
 See [docs/](docs/) for complete examples and API reference.
 
+### Using FFI Library (Go Example)
+
+```go
+package main
+
+/*
+#cgo LDFLAGS: -L./rekrypt-ffi/lib/linux-x64 -lrekrypt_ffi
+#include <stdint.h>
+extern int rekrypt_version();
+*/
+import "C"
+import "fmt"
+
+func main() {
+    version := C.rekrypt_version()
+    fmt.Printf("Rekrypt version: %d\n", version)
+}
+```
+
+More examples in [rekrypt-ffi/](rekrypt-ffi/).
+
+## Supported Platforms
+
+### WebAssembly
+- All modern browsers (Chrome, Firefox, Safari, Edge)
+- Node.js with WASM support
+- Deno and Bun
+
+### FFI Library (Native)
+Rekrypt provides native FFI libraries for multiple platforms:
+
+| Platform | Architecture | Status |
+|----------|--------------|--------|
+| **Linux** | x86_64 (Intel/AMD) | Supported |
+| **Linux** | ARM64 (ARMv8) | Supported |
+| **Windows** | x86_64 (64-bit) | Supported |
+| **macOS** | x86_64 (Intel) | Supported |
+| **macOS** | ARM64 (Apple Silicon) | Supported |
+
+**Language Bindings:** C, C++, Go (CGO), Python (ctypes), Node.js (FFI), Rust, and any language with C FFI support.
+
+See [rekrypt-ffi/](rekrypt-ffi/) for FFI usage examples.
+
 ## Documentation
 
 - [API Reference](docs/API.md) - Complete API documentation
 - [Usage Examples](docs/EXAMPLES.md) - Code examples
+- [Cross-Compilation Guide](rekrypt-ffi/CROSS_COMPILE.md) - Build FFI for multiple platforms
 - [Architecture & Design](docs/ARCHITECTURE.md) - System architecture and cryptographic design
 - [Internal Implementation](docs/INTERNALS.md) - Deep dive into implementation details
 - [Security Guide](docs/SECURITY.md) - Security best practices

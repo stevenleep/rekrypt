@@ -18,8 +18,16 @@ help:
 	@echo "Build targets:"
 	@echo "  make all           Build everything (WASM + FFI + Transform Service)"
 	@echo "  make build-wasm    Build WebAssembly package"
-	@echo "  make build-ffi     Build FFI library"
+	@echo "  make build-ffi     Build FFI library (current platform)"
 	@echo "  make build-server  Build transform service"
+	@echo ""
+	@echo "Cross-compilation (FFI):"
+	@echo "  make install-targets   Install cross-compilation tools"
+	@echo "  make cross-compile     Build FFI for all platforms"
+	@echo "  make cross-linux       Build for Linux (x64 + ARM64)"
+	@echo "  make cross-windows     Build for Windows (x64)"
+	@echo "  make cross-macos       Build for macOS (x64 + ARM64)"
+	@echo "  make cross-help        Show cross-compilation help"
 	@echo ""
 	@echo "Test targets:"
 	@echo "  make test          Run all tests"
@@ -37,6 +45,8 @@ help:
 	@echo "  make check         Check code quality"
 	@echo "  make fmt           Format code"
 	@echo "  make install       Install dependencies"
+	@echo "  make version       Show version information"
+	@echo "  make size          Show build artifact sizes"
 
 # Build everything
 build: build-wasm build-ffi build-server
@@ -236,3 +246,115 @@ bench:
 .PHONY: ci
 ci: clean install build test check
 	@echo "[✓] CI checks passed"
+
+# Cross-compilation targets for FFI
+.PHONY: cross-compile cross-linux cross-windows cross-macos install-targets
+
+# Install cross-compilation targets and tools
+install-targets:
+	@echo "[INSTALL] Cross-compilation targets and tools..."
+	@rustup target add x86_64-unknown-linux-gnu || true
+	@rustup target add aarch64-unknown-linux-gnu || true
+	@rustup target add x86_64-pc-windows-gnu || true
+	@rustup target add x86_64-apple-darwin || true
+	@if ! command -v cargo-zigbuild >/dev/null 2>&1; then \
+		echo "  Installing cargo-zigbuild..."; \
+		cargo install cargo-zigbuild; \
+	fi
+	@if ! command -v zig >/dev/null 2>&1; then \
+		echo "  [WARN] zig not found. Install with: brew install zig"; \
+		exit 1; \
+	fi
+	@echo "[✓] Targets and tools installed"
+
+# Cross-compile for Linux x86_64
+cross-linux-x64:
+	@echo "[CROSS] Building FFI for Linux x86_64..."
+	@cd rekrypt-ffi && cargo zigbuild --release --target x86_64-unknown-linux-gnu
+	@mkdir -p rekrypt-ffi/lib/linux-x64
+	@cp rekrypt-ffi/target/x86_64-unknown-linux-gnu/release/librekrypt_ffi.so rekrypt-ffi/lib/linux-x64/ 2>/dev/null || true
+	@cp rekrypt-ffi/target/x86_64-unknown-linux-gnu/release/librekrypt_ffi.a rekrypt-ffi/lib/linux-x64/ 2>/dev/null || true
+	@echo "[✓] Linux x86_64: rekrypt-ffi/lib/linux-x64/"
+
+# Cross-compile for Linux ARM64
+cross-linux-arm64:
+	@echo "[CROSS] Building FFI for Linux ARM64..."
+	@cd rekrypt-ffi && cargo zigbuild --release --target aarch64-unknown-linux-gnu
+	@mkdir -p rekrypt-ffi/lib/linux-arm64
+	@cp rekrypt-ffi/target/aarch64-unknown-linux-gnu/release/librekrypt_ffi.so rekrypt-ffi/lib/linux-arm64/ 2>/dev/null || true
+	@cp rekrypt-ffi/target/aarch64-unknown-linux-gnu/release/librekrypt_ffi.a rekrypt-ffi/lib/linux-arm64/ 2>/dev/null || true
+	@echo "[✓] Linux ARM64: rekrypt-ffi/lib/linux-arm64/"
+
+# Cross-compile for Windows x86_64
+cross-windows-x64:
+	@echo "[CROSS] Building FFI for Windows x86_64..."
+	@cd rekrypt-ffi && cargo zigbuild --release --target x86_64-pc-windows-gnu
+	@mkdir -p rekrypt-ffi/lib/windows-x64
+	@cp rekrypt-ffi/target/x86_64-pc-windows-gnu/release/rekrypt_ffi.dll rekrypt-ffi/lib/windows-x64/ 2>/dev/null || true
+	@cp rekrypt-ffi/target/x86_64-pc-windows-gnu/release/rekrypt_ffi.lib rekrypt-ffi/lib/windows-x64/ 2>/dev/null || true
+	@cp rekrypt-ffi/target/x86_64-pc-windows-gnu/release/librekrypt_ffi.a rekrypt-ffi/lib/windows-x64/ 2>/dev/null || true
+	@echo "[✓] Windows x86_64: rekrypt-ffi/lib/windows-x64/"
+
+# Cross-compile for macOS x86_64
+cross-macos-x64:
+	@echo "[CROSS] Building FFI for macOS x86_64..."
+	@cd rekrypt-ffi && cargo build --release --target x86_64-apple-darwin
+	@mkdir -p rekrypt-ffi/lib/macos-x64
+	@cp rekrypt-ffi/target/x86_64-apple-darwin/release/librekrypt_ffi.dylib rekrypt-ffi/lib/macos-x64/ 2>/dev/null || true
+	@cp rekrypt-ffi/target/x86_64-apple-darwin/release/librekrypt_ffi.a rekrypt-ffi/lib/macos-x64/ 2>/dev/null || true
+	@echo "[✓] macOS x86_64: rekrypt-ffi/lib/macos-x64/"
+
+# Cross-compile for macOS ARM64
+cross-macos-arm64:
+	@echo "[CROSS] Building FFI for macOS ARM64..."
+	@cd rekrypt-ffi && cargo build --release --target aarch64-apple-darwin
+	@mkdir -p rekrypt-ffi/lib/macos-arm64
+	@cp rekrypt-ffi/target/aarch64-apple-darwin/release/librekrypt_ffi.dylib rekrypt-ffi/lib/macos-arm64/ 2>/dev/null || true
+	@cp rekrypt-ffi/target/aarch64-apple-darwin/release/librekrypt_ffi.a rekrypt-ffi/lib/macos-arm64/ 2>/dev/null || true
+	@echo "[✓] macOS ARM64: rekrypt-ffi/lib/macos-arm64/"
+
+# Cross-compile for all Linux platforms
+cross-linux: cross-linux-x64 cross-linux-arm64
+
+# Cross-compile for all Windows platforms
+cross-windows: cross-windows-x64
+
+# Cross-compile for all macOS platforms
+cross-macos: cross-macos-x64 cross-macos-arm64
+
+# Cross-compile for all platforms (requires cross-compilation tools)
+cross-compile: install-targets
+	@echo "[CROSS] Building FFI for all platforms..."
+	@$(MAKE) cross-linux || echo "[WARN] Linux cross-compilation failed (may need cross-compilation tools)"
+	@$(MAKE) cross-windows || echo "[WARN] Windows cross-compilation failed (may need mingw-w64)"
+	@$(MAKE) cross-macos || echo "[INFO] macOS cross-compilation only works on macOS"
+	@echo ""
+	@echo "[✓] Cross-compilation complete!"
+	@echo ""
+	@echo "Built libraries in rekrypt-ffi/lib/:"
+	@ls -lh rekrypt-ffi/lib/*/librekrypt_ffi.* 2>/dev/null || echo "  (check individual platform directories)"
+
+# Show cross-compilation help
+.PHONY: cross-help
+cross-help:
+	@echo "Cross-compilation targets (using cargo-zigbuild):"
+	@echo ""
+	@echo "Setup:"
+	@echo "  make install-targets     Install all cross-compilation targets and tools"
+	@echo ""
+	@echo "Build commands:"
+	@echo "  make cross-compile       Build for all platforms"
+	@echo "  make cross-linux         Build for Linux (x64 + ARM64)"
+	@echo "  make cross-linux-x64     Build for Linux x86_64"
+	@echo "  make cross-linux-arm64   Build for Linux ARM64"
+	@echo "  make cross-windows       Build for Windows x64"
+	@echo "  make cross-windows-x64   Build for Windows x86_64"
+	@echo "  make cross-macos         Build for macOS (x64 + ARM64)"
+	@echo "  make cross-macos-x64     Build for macOS x86_64"
+	@echo "  make cross-macos-arm64   Build for macOS ARM64"
+	@echo ""
+	@echo "Prerequisites:"
+	@echo "  cargo-zigbuild: cargo install cargo-zigbuild"
+	@echo "  zig compiler:   brew install zig (macOS)"
+	@echo ""
+	@echo "Output: rekrypt-ffi/lib/{linux-x64,linux-arm64,windows-x64,macos-x64,macos-arm64}/"

@@ -7,8 +7,10 @@
 3. [Cryptographic Primitives](#cryptographic-primitives)
 4. [Security Design](#security-design)
 5. [Key Management](#key-management)
-6. [Module Architecture](#module-architecture)
-7. [Data Flow](#data-flow)
+6. [Multi-Platform Architecture](#multi-platform-architecture)
+7. [Module Architecture](#module-architecture)
+8. [Data Flow](#data-flow)
+9. [Cross-Platform Build System](#cross-platform-build-system)
 
 ## Proxy Re-Encryption Theory
 
@@ -356,13 +358,91 @@ Ciphertext                  MAC
 └─────────────────┘    Cannot recover mnemonic!
 ```
 
+## Multi-Platform Architecture
+
+Rekrypt supports multiple deployment targets through different build configurations:
+
+### Deployment Targets
+
+```
+                    ┌─────────────────┐
+                    │  Rekrypt Core   │
+                    │  (Rust Library) │
+                    └────────┬────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+            ▼                ▼                ▼
+    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+    │  WASM Build  │  │   FFI Build  │  │ Transform    │
+    │              │  │              │  │ Service      │
+    │ Target:      │  │ Target:      │  │              │
+    │ • Browser    │  │ • Linux x64  │  │ Go binary    │
+    │ • Node.js    │  │ • Linux ARM  │  │ using FFI    │
+    │ • Deno/Bun   │  │ • Windows    │  │              │
+    │              │  │ • macOS x64  │  │              │
+    │ Output:      │  │ • macOS ARM  │  │              │
+    │ .wasm (512KB)│  │              │  │              │
+    │              │  │ Output:      │  │              │
+    │              │  │ .so/.dll     │  │              │
+    │              │  │ .a (static)  │  │              │
+    └──────────────┘  └──────────────┘  └──────────────┘
+```
+
+### Platform Support Matrix
+
+| Platform | WASM | FFI | Transform Service |
+|----------|------|-----|-------------------|
+| Browser | Yes | No | No |
+| Node.js | Yes | Yes | No |
+| Linux x64 | Via Node | Yes | Yes |
+| Linux ARM64 | Via Node | Yes | Yes |
+| Windows x64 | Via Node | Yes | Possible |
+| macOS Intel | Yes | Yes | Yes |
+| macOS ARM | Yes | Yes | Yes |
+
+### FFI Architecture
+
+The FFI layer provides C-compatible bindings for native integration:
+
+```
+┌──────────────────────────────────────────────────┐
+│           Application Layer (C, Go, Python...)    │
+└─────────────────────┬────────────────────────────┘
+                      │ C ABI
+                      ▼
+┌──────────────────────────────────────────────────┐
+│            FFI Layer (rekrypt-ffi)                │
+│                                                   │
+│  • ByteArray marshalling                         │
+│  • Error handling & conversion                   │
+│  • Thread-safe error storage                     │
+│  • Memory management (allocation/free)           │
+└─────────────────────┬────────────────────────────┘
+                      │ Rust API
+                      ▼
+┌──────────────────────────────────────────────────┐
+│            Core Library (rekrypt)                 │
+│                                                   │
+│  • Cryptographic operations                      │
+│  • Key management                                │
+│  • Data validation                               │
+└──────────────────────────────────────────────────┘
+```
+
+**Key Features**:
+- No runtime dependencies (static linking available)
+- Thread-safe error handling
+- Zero-copy where possible
+- Consistent API across all platforms
+
 ## Module Architecture
 
 ### Layered Design
 
 ```
 ┌─────────────────────────────────────────────┐
-│              lib.rs (API Layer)              │ ← WASM bindings
+│         API Layer (lib.rs / ffi)             │ ← WASM or C bindings
 ├─────────────────────────────────────────────┤
 │         Business Logic Layer                 │
 │  ┌─────────┬──────────┬─────────────────┐  │
@@ -395,10 +475,13 @@ Ciphertext                  MAC
 
 ### Module Responsibilities
 
-**lib.rs** (406 lines):
+**Core Library (rekrypt/src/)**:
+
+**lib.rs** (437 lines):
 - WASM API bindings
 - Thin wrapper over business logic
 - Method routing
+- EncryptSDK main interface
 
 **crypto.rs** (176 lines):
 - AES-256-GCM encryption/decryption
@@ -455,6 +538,25 @@ Ciphertext                  MAC
 **i18n.rs** (176 lines):
 - English/Chinese messages
 - Error message localization
+
+**FFI Library (rekrypt-ffi/src/)**:
+
+**lib.rs** (549 lines):
+- C-compatible FFI bindings
+- ByteArray structure for memory marshalling
+- Error handling and thread-safe error storage
+- Functions exported for C ABI:
+  - rekrypt_version()
+  - rekrypt_generate_keypair()
+  - rekrypt_generate_signing_keypair()
+  - rekrypt_generate_transform_key()
+  - rekrypt_encrypt()
+  - rekrypt_transform()
+  - rekrypt_decrypt_delegated()
+  - rekrypt_free_byte_array()
+  - rekrypt_get_last_error()
+- Memory management utilities
+- Platform-specific compilation (Linux, Windows, macOS)
 
 ## Data Flow
 
@@ -754,6 +856,62 @@ Scales to GB files
 - Independent lifecycles
 - Easier to understand
 
+## Cross-Platform Build System
+
+### Build Configuration
+
+**WASM Target**:
+```toml
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"          # Optimize for size
+lto = true               # Link-time optimization
+codegen-units = 1        # Better optimization
+panic = "abort"          # Smaller binary
+strip = true             # Remove debug symbols
+```
+
+**FFI Target**:
+```toml
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[profile.release]
+opt-level = 3            # Optimize for speed
+lto = true
+codegen-units = 1
+strip = true
+```
+
+### Cross-Compilation
+
+Using `cargo-zigbuild` for seamless cross-platform builds:
+
+```bash
+# Linux x86_64
+cargo zigbuild --release --target x86_64-unknown-linux-gnu
+
+# Linux ARM64
+cargo zigbuild --release --target aarch64-unknown-linux-gnu
+
+# Windows x64
+cargo zigbuild --release --target x86_64-pc-windows-gnu
+
+# macOS Intel
+cargo build --release --target x86_64-apple-darwin
+
+# macOS ARM
+cargo build --release --target aarch64-apple-darwin
+```
+
+**Benefits**:
+- No complex toolchain setup
+- Works from any host platform
+- Consistent build process
+- Fast compilation
+
 ## Future Enhancements
 
 ### Planned Features
@@ -762,6 +920,7 @@ Scales to GB files
 2. **Time-Locked Encryption**: Automatic key release
 3. **Multi-Recipient**: Single encryption, multiple recipients
 4. **Quantum-Resistant**: Post-quantum cryptography
+5. **More FFI Bindings**: Java JNI, Ruby FFI, Swift
 
 ### Extensibility Points
 
@@ -773,4 +932,9 @@ Scales to GB files
 - Alternative curves
 - Different symmetric algorithms
 - Custom KDF parameters
+
+**Platform Expansion**:
+- Android AAR (Java/Kotlin)
+- iOS XCFramework (Swift)
+- .NET P/Invoke bindings
 

@@ -36,8 +36,8 @@ func Version() string {
 
 func LastError() string {
 	if errPtr := C.rekrypt_last_error(); errPtr != nil {
-	return C.GoString(errPtr)
-}
+		return C.GoString(errPtr)
+	}
 	return ""
 }
 
