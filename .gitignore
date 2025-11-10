@@ -42,3 +42,20 @@ tmp/
 temp/
 
 proxy
+rekrypt-transform
+rekrypt-server
+*.exe
+.env
+*.a
+*.dylib
+*.so
+*.dll
+*.lib
+*.exp
+*.def
+*.manifest
+*.rc
+*.res
+*.obj
+*.pdb
+*.ilk

@@ -16,9 +16,29 @@ npm install rekrypt
 
 # Cargo
 cargo add rekrypt
+```
 
-# Build from source
-wasm-pack build --target web --release
+## Build from Source
+
+This project provides a unified Makefile for building all components:
+
+```bash
+# Quick start - build everything
+make all
+
+# Or build specific components
+make build-wasm     # WebAssembly package
+make build-ffi      # FFI library (for Go/Python/C++)
+make build-server   # Go transform server
+
+# Run tests
+make test           # All tests
+make test-ffi       # FFI tests only
+
+# Development
+make dev-server     # Run Go server in dev mode
+make clean          # Clean all artifacts
+make help           # Show all available commands
 ```
 
 ## Quick Start

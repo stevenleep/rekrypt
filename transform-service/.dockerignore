@@ -1,0 +1,5 @@
+rekrypt-server
+*.md
+test_client.*
+.git
+.env

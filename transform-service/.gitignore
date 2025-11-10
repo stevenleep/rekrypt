@@ -1,0 +1,10 @@
+rekrypt-transform
+rekrypt-server
+*.exe
+.env
+.DS_Store
+
+# Test scripts
+test_*.sh
+*_test.sh
+
