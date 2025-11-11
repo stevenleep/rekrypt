@@ -1,6 +1,6 @@
 [package]
 name = "rekrypt-ffi"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "FFI bindings for rekrypt - C/CGO interface for proxy re-encryption"
 authors = ["stenvenleep"]
