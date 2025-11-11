@@ -1,0 +1,59 @@
+# NPM ignore file - controls what gets published to npm
+# This is for the root directory. The pkg/ directory has its own package.json "files" field
+
+# Source files
+src/
+target/
+rekrypt-ffi/
+transform-service/
+scripts/
+docs/
+
+# Build artifacts  
+*.wasm.d.ts
+!pkg/*.wasm.d.ts
+
+# Development files
+.git/
+.github/
+.gitignore
+.cargo/
+Cargo.toml
+Cargo.lock
+Makefile
+wasm-pack.toml
+
+# Documentation (should be in pkg/)
+README.md
+!pkg/README.md
+
+# License (should be in pkg/)
+LICENSE
+COPYRIGHT
+!pkg/LICENSE
+
+# Test files
+tests/
+**/test/
+**/*.test.js
+**/*.spec.js
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+

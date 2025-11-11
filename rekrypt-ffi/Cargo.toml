@@ -2,16 +2,22 @@
 name = "rekrypt-ffi"
 version = "1.0.0"
 edition = "2021"
+rust-version = "1.70"
 description = "FFI bindings for rekrypt - C/CGO interface for proxy re-encryption"
 authors = ["stenvenleep"]
 license = "AGPL-3.0-or-later"
+repository = "https://github.com/stevenleep/rekrypt"
+homepage = "https://github.com/stevenleep/rekrypt"
+readme = "README.md"
+keywords = ["cryptography", "ffi", "cgo", "proxy-re-encryption", "curve25519"]
+categories = ["cryptography", "api-bindings", "external-ffi-bindings"]
 
 [lib]
 name = "rekrypt_ffi"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-rekrypt = { path = "..", version = "0.2.0" }
+rekrypt = { path = "..", version = "1.0.0" }
 recrypt = { version = "0.14.1" }
 postcard = { version = "1.1", features = ["use-std"] }
 serde = { version = "1.0", features = ["derive"] }

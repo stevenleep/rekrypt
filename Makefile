@@ -56,8 +56,17 @@ build: build-wasm build-ffi build-server
 build-wasm:
 	@echo "[BUILD] WebAssembly package..."
 	@if command -v wasm-pack >/dev/null 2>&1; then \
-		wasm-pack build --target web --out-dir pkg; \
-		echo "[✓] WASM package: pkg/"; \
+		wasm-pack build \
+			--target web \
+			--out-dir pkg \
+			--release \
+			--scope stevenleep; \
+		echo "[✓] WASM package built: pkg/"; \
+		if command -v node >/dev/null 2>&1 && [ -f scripts/enhance-pkg.js ]; then \
+			node scripts/enhance-pkg.js; \
+		else \
+			echo "[WARN] Could not enhance package.json (node or script not found)"; \
+		fi; \
 	else \
 		echo "[ERROR] wasm-pack not found. Install: cargo install wasm-pack"; \
 		exit 1; \

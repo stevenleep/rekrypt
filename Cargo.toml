@@ -2,16 +2,37 @@
 name = "rekrypt"
 version = "1.0.0"
 edition = "2021"
+rust-version = "1.70"
 description = "Professional proxy re-encryption library based on Curve25519 for Rust and WebAssembly"
 authors = ["stevenleep"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/stevenleep/rekrypt"
 homepage = "https://github.com/stevenleep/rekrypt"
-keywords = ["cryptography", "proxy-re-encryption", "wasm", "encryption", "security"]
+documentation = "https://docs.rs/rekrypt"
+readme = "README.md"
+keywords = ["cryptography", "proxy-re-encryption", "curve25519", "end-to-end", "wasm"]
 categories = ["cryptography", "wasm", "web-programming"]
+exclude = [
+    "pkg/",
+    "target/",
+    "rekrypt-ffi/",
+    "transform-service/",
+    "scripts/",
+    ".github/",
+    ".gitignore",
+    "Makefile",
+    "*.md",
+    "!README.md"
+]
+
+[badges]
+maintenance = { status = "actively-developed" }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+name = "rekrypt"
+path = "src/lib.rs"
+doctest = true
 
 [dependencies]
 wasm-bindgen = "0.2"
@@ -45,5 +66,25 @@ opt-level = "z" # Prioritizes small binary size. Use `3` if you prefer speed.
 panic = "abort" # Higher performance by disabling panic handlers.
 strip = true # Ensures debug symbols are removed.
 
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.test]
+opt-level = 1
+
+[package.metadata.docs.rs]
+all-features = true
+targets = ["wasm32-unknown-unknown"]
+rustdoc-args = ["--cfg", "docsrs"]
+
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-O4", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
+wasm-opt = [
+  "-O4",
+  "--enable-bulk-memory",
+  "--enable-nontrapping-float-to-int",
+  "--enable-sign-ext"
+]
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = false  # 开发模式禁用优化，加快构建速度
