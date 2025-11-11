@@ -34,6 +34,12 @@ help:
 	@echo "  make test-wasm     Test WASM package"
 	@echo "  make test-ffi      Test FFI library"
 	@echo ""
+	@echo "Documentation & Publishing:"
+	@echo "  make doc           Generate API documentation"
+	@echo "  make doc-open      Generate and open documentation"
+	@echo "  make publish-check Run pre-publish checks"
+	@echo "  make publish       Publish to crates.io (with docs.rs)"
+	@echo ""
 	@echo "Clean targets:"
 	@echo "  make clean         Clean all build artifacts"
 	@echo "  make clean-wasm    Clean WASM artifacts"
@@ -191,10 +197,38 @@ quick: build-ffi build-server
 	@echo "[✓] Quick build complete (FFI + Service)"
 
 # Documentation
-.PHONY: doc
+.PHONY: doc doc-open publish-check publish
 doc:
 	@echo "[DOC] Generating documentation..."
+	@cargo doc --no-deps --lib
+
+doc-open:
+	@echo "[DOC] Generating and opening documentation..."
 	@cargo doc --no-deps --open
+
+# Publishing
+publish-check:
+	@echo "[CHECK] Running pre-publish checks..."
+	@./scripts/prepare-release.sh
+
+publish:
+	@echo "[PUBLISH] Publishing to crates.io..."
+	@./scripts/prepare-release.sh
+	@echo ""
+	@read -p "Continue with publish? (y/N) " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cargo publish; \
+		VERSION=$$(cargo pkgid | cut -d# -f2); \
+		echo ""; \
+		echo "✓ Published rekrypt v$$VERSION"; \
+		echo ""; \
+		echo "Documentation will be available at:"; \
+		echo "  https://docs.rs/rekrypt"; \
+		echo ""; \
+		echo "Don't forget to:"; \
+		echo "  git tag v$$VERSION && git push origin v$$VERSION"; \
+	fi
 
 # Format code
 .PHONY: fmt

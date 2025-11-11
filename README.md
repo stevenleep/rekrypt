@@ -119,8 +119,16 @@ See [rekrypt-ffi/](rekrypt-ffi/) for FFI usage examples.
 
 ## Documentation
 
+### API Documentation
+
+- **Rust API Docs**: Run `make doc-open` or visit https://docs.rs/rekrypt (after publishing)
+- **GitHub Pages**: https://stevenleep.github.io/rekrypt/ (auto-deployed on push)
+
+### Guides
+
 - [API Reference](docs/API.md) - Complete API documentation
 - [Usage Examples](docs/EXAMPLES.md) - Code examples
+- [Publishing Guide](PUBLISHING.md) - How to publish documentation and packages
 - [Cross-Compilation Guide](rekrypt-ffi/CROSS_COMPILE.md) - Build FFI for multiple platforms
 - [Architecture & Design](docs/ARCHITECTURE.md) - System architecture and cryptographic design
 - [Internal Implementation](docs/INTERNALS.md) - Deep dive into implementation details
