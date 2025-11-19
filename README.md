@@ -3,6 +3,7 @@
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 [![WebAssembly](https://img.shields.io/badge/wasm-ready-green.svg)](https://webassembly.org/)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/stevenleep/rekrypt)
 
 Professional proxy re-encryption library based on **Curve25519 (ECC)** for Rust and WebAssembly. 
 
